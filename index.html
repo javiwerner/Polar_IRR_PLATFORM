@@ -88,10 +88,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         <p style="font-size: 13px; color: #6b7280; margin-bottom: 16px;">Select your name and enter your password to begin.</p>
         <select id="loginReviewerSelect" style="width: 100%; padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; margin-bottom: 12px;">
             <option value="">Select role...</option>
-            <option value="Researcher 1">Researcher 1</option>
-            <option value="Researcher 2">Researcher 2</option>
-            <option value="Researcher 3">Researcher 3</option>
-            <option value="Researcher 4">Researcher 4</option>
+            <option value="Reviewer 1">Reviewer 1</option>
+            <option value="Reviewer 2">Reviewer 2</option>
+            <option value="Reviewer 3">Reviewer 3</option>
+            <option value="Reviewer 4">Reviewer 4</option>
             <option value="admin">Agreement Dashboard / Export</option>
         </select>
         <input type="password" id="loginPwd" placeholder="Password" onkeyup="if(event.key==='Enter')loginReviewer()">
@@ -226,10 +226,10 @@ let panMode = 'pan'; // 'pan' or 'zoom'
 let allTrims = JSON.parse(localStorage.getItem('irr_trims') || '{}');
 
 const REVIEWER_PASSWORDS = {
-    'Researcher 1': 'one',
-    'Researcher 2': 'two',
-    'Researcher 3': 'three',
-    'Researcher 4': 'four',
+    'Reviewer 1': 'one',
+    'Reviewer 2': 'two',
+    'Reviewer 3': 'three',
+    'Reviewer 4': 'four',
     'admin': 'whoop'
 };
 
