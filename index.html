@@ -417,7 +417,7 @@ function renderChart(study) {
         mode: 'lines',
         name: 'Polar HR (truth)',
         line: { color: '#92400e', width: 2.5 },
-        hovertemplate: '%{y:.0f} BPM<extra>Polar</extra>'
+        hovertemplate: '%{y:.0f}<extra></extra>'
     });
     
     // WHOOP devices (clipped to Polar time bounds)
@@ -441,7 +441,7 @@ function renderChart(study) {
             name: `WHOOP ${deviceNum}`,
             line: { color: colors[i % colors.length], width: 1.5 },
             opacity: 0.75,
-            hoverinfo: 'skip'
+            hovertemplate: '%{y:.0f}<extra></extra>'
         });
         i++;
     }
@@ -470,7 +470,7 @@ function renderChart(study) {
                  range: [0, endMin], autorange: false, hoverformat: '.0f',
                  spikemode: 'across', spikethickness: 1, spikecolor: 'rgba(150,150,150,0.5)', spikedash: 'solid', spikesnap: 'cursor' },
         legend: { orientation: 'h', y: 1.08 },
-        hovermode: 'x',
+        hovermode: 'x unified',
         hoverlabel: { namelength: 15, bgcolor: 'rgba(255,255,255,0.5)' },
         shapes: shapes,
         annotations: annotations,
@@ -480,6 +480,24 @@ function renderChart(study) {
     Plotly.newPlot('chart', traces, layout, { responsive: true, displayModeBar: false, scrollZoom: false }).then(() => {
         const chartEl = document.getElementById('chart');
         chartEl.on('plotly_click', onChartClick);
+        
+        // Hover dot that follows Polar trace
+        const hoverDot = document.createElement('div');
+        hoverDot.style.cssText = 'position:absolute;width:8px;height:8px;border-radius:50%;background:#92400e;pointer-events:none;display:none;z-index:100;box-shadow:0 0 3px rgba(0,0,0,0.3);';
+        chartEl.querySelector('.plot-container').appendChild(hoverDot);
+        
+        chartEl.on('plotly_hover', function(data) {
+            const pt = data.points.find(p => p.curveNumber === 0);
+            if (!pt) { hoverDot.style.display = 'none'; return; }
+            const xaxis = chartEl._fullLayout.xaxis;
+            const yaxis = chartEl._fullLayout.yaxis;
+            const xPx = xaxis.l2p(pt.x) + xaxis._offset;
+            const yPx = yaxis.l2p(pt.y) + yaxis._offset;
+            hoverDot.style.left = (xPx - 4) + 'px';
+            hoverDot.style.top = (yPx - 4) + 'px';
+            hoverDot.style.display = 'block';
+        });
+        chartEl.on('plotly_unhover', function() { hoverDot.style.display = 'none'; });
     });
 }
 
