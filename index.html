@@ -417,7 +417,7 @@ function renderChart(study) {
         mode: 'lines',
         name: 'Polar HR (truth)',
         line: { color: '#92400e', width: 2.5 },
-        hovertemplate: '%{y:.0f}<extra></extra>'
+        hovertemplate: '%{y:.0f} BPM<extra>Polar</extra>'
     });
     
     // WHOOP devices (clipped to Polar time bounds)
@@ -441,7 +441,7 @@ function renderChart(study) {
             name: `WHOOP ${deviceNum}`,
             line: { color: colors[i % colors.length], width: 1.5 },
             opacity: 0.75,
-            hovertemplate: '%{y:.0f}<extra></extra>'
+            hoverinfo: 'skip'
         });
         i++;
     }
@@ -470,7 +470,7 @@ function renderChart(study) {
                  range: [0, endMin], autorange: false, hoverformat: '.0f',
                  spikemode: 'across', spikethickness: 1, spikecolor: 'rgba(150,150,150,0.5)', spikedash: 'solid', spikesnap: 'cursor' },
         legend: { orientation: 'h', y: 1.08 },
-        hovermode: 'x unified',
+        hovermode: 'x',
         hoverlabel: { namelength: 15, bgcolor: 'rgba(255,255,255,0.5)' },
         shapes: shapes,
         annotations: annotations,
