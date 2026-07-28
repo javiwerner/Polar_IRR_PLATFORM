@@ -520,7 +520,10 @@ function onChartClick(data) {
         addTrim(currentStudy, s, e, reason.trim());
         trimStart = null;
         document.getElementById('trimModeLabel').textContent = 'Click chart to mark start of bad region';
+        const chartEl = document.getElementById('chart');
+        const savedRange = chartEl._fullLayout ? chartEl._fullLayout.xaxis.range.slice() : null;
         renderChart(STUDIES[currentStudy]);
+        if (savedRange) Plotly.relayout('chart', { 'xaxis.range': savedRange });
         renderTrimList();
     }
 }
@@ -589,7 +592,10 @@ function deleteTrim(studyId, index) {
     if (allTrims[key]) {
         allTrims[key].splice(index, 1);
         saveTrims();
+        const chartEl = document.getElementById('chart');
+        const savedRange = chartEl._fullLayout ? chartEl._fullLayout.xaxis.range.slice() : null;
         renderChart(STUDIES[currentStudy]);
+        if (savedRange) Plotly.relayout('chart', { 'xaxis.range': savedRange });
         renderTrimList();
     }
 }
