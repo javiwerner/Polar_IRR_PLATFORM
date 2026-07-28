@@ -930,15 +930,83 @@ function computeIRR() {
     });
     const sortedNotes = Object.values(noteFreq).sort((a, b) => b.count - a.count);
 
+    // Theme extraction — normalize variations into canonical categories
+    const THEMES = [
+        { canonical: 'Multi-device disagreement', patterns: ['multi device', 'multidevice', 'multi-device', 'multidevce'] },
+        { canonical: 'Stepwise plotting', patterns: ['stepwise'] },
+        { canonical: 'Dramatic/sudden HR drop or raise', patterns: ['dramatic drop', 'dramatic raise', 'dramatic change', 'sudden drop', 'sudden raise', 'sudden hr drop', 'sudden hr raise', 'dramatic hr', 'significant drop', 'significant raise', 'significant sudden'] },
+        { canonical: 'Not physiologically realistic', patterns: ['not physiolog', 'not realistic', 'unprobable', 'not probable', 'physiologically'] },
+        { canonical: 'Not following trend', patterns: ['not following'] },
+        { canonical: 'Visual cues', patterns: ['visual cue'] },
+        { canonical: 'Anecdotal (end of study)', patterns: ['anecdot', 'end of study', 'end of a study'] },
+    ];
+    const themeCounts = THEMES.map(t => ({ ...t, count: 0, reviewerCounts: {} }));
+    allNotes.forEach(n => {
+        const lower = n.toLowerCase();
+        themeCounts.forEach(t => {
+            if (t.patterns.some(p => lower.includes(p))) {
+                t.count++;
+            }
+        });
+    });
+    // Per-reviewer theme counts
+    reviewers.forEach(r => {
+        const rNotes = [];
+        studyIds.forEach(sid => {
+            (irrData[r][sid] || []).forEach(t => {
+                const note = (t.note || t.reason || '').trim();
+                if (note) rNotes.push(note.toLowerCase());
+            });
+        });
+        themeCounts.forEach(tc => {
+            tc.reviewerCounts[r] = rNotes.filter(n => tc.patterns.some(p => n.includes(p))).length;
+        });
+    });
+    const activeThemes = themeCounts.filter(t => t.count > 0).sort((a, b) => b.count - a.count);
+
     html += `<h3 style="margin-bottom:8px; font-size:14px;">Reasons Analysis</h3>`;
 
-    // Frequency table
+    // Distilled themes
+    if (activeThemes.length > 0) {
+        const maxCount = activeThemes[0].count;
+        html += `<div style="margin-bottom:20px;">
+            <strong style="font-size:12px; color:#374151;">Distilled Themes</strong>
+            <p style="font-size:11px; color:#6b7280; margin:4px 0 10px;">Common categories extracted from all reviewer notes, normalized for consistency.</p>
+            ${activeThemes.map(t => `<div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+                <span style="font-size:12px; width:220px; flex-shrink:0; font-weight:500;">${t.canonical}</span>
+                <div style="flex:1; height:20px; background:#f3f4f6; border-radius:4px; overflow:hidden; position:relative;">
+                    <div style="height:100%; width:${(t.count / maxCount) * 100}%; background:#3b82f6; border-radius:4px;"></div>
+                </div>
+                <span style="font-size:12px; font-weight:600; width:36px; text-align:right;">${t.count}</span>
+            </div>`).join('')}
+        </div>`;
+
+        // Theme usage per reviewer
+        html += `<div style="margin-bottom:20px;">
+            <strong style="font-size:12px; color:#374151;">Theme Usage by Reviewer</strong>
+            <table style="width:100%; font-size:11px; border-collapse:collapse; margin-top:6px;">
+                <tr style="border-bottom:1px solid #e5e7eb; background:#f9fafb;">
+                    <th style="text-align:left;padding:6px;">Theme</th>
+                    ${reviewers.map((r, i) => `<th style="text-align:center;padding:6px;color:${REVIEWER_COLORS[i % REVIEWER_COLORS.length]};">${r}</th>`).join('')}
+                    <th style="text-align:right;padding:6px;">Total</th>
+                </tr>
+                ${activeThemes.map(t => `<tr style="border-bottom:1px solid #f3f4f6;">
+                    <td style="padding:6px;font-weight:500;">${t.canonical}</td>
+                    ${reviewers.map(r => `<td style="text-align:center;padding:6px;">${t.reviewerCounts[r] || 0}</td>`).join('')}
+                    <td style="text-align:right;padding:6px;font-weight:600;">${t.count}</td>
+                </tr>`).join('')}
+            </table>
+        </div>`;
+    }
+
+    // Raw frequency table
     if (sortedNotes.length > 0) {
         html += `<div style="margin-bottom:16px;">
-            <strong style="font-size:12px; color:#374151;">Most Common Reasons</strong>
+            <strong style="font-size:12px; color:#374151;">Raw Note Frequency</strong>
+            <p style="font-size:11px; color:#6b7280; margin:4px 0 6px;">Exact phrases as written by reviewers.</p>
             <table style="width:100%; font-size:12px; border-collapse:collapse; margin-top:6px;">
                 <tr style="border-bottom:1px solid #e5e7eb; background:#f9fafb;"><th style="text-align:left;padding:6px;">Reason</th><th style="text-align:right;padding:6px;">Count</th></tr>
-                ${sortedNotes.slice(0, 15).map(n => `<tr style="border-bottom:1px solid #f3f4f6;"><td style="padding:6px;">${n.text}</td><td style="text-align:right;padding:6px;font-weight:500;">${n.count}</td></tr>`).join('')}
+                ${sortedNotes.slice(0, 20).map(n => `<tr style="border-bottom:1px solid #f3f4f6;"><td style="padding:6px;">${n.text}</td><td style="text-align:right;padding:6px;font-weight:500;">${n.count}</td></tr>`).join('')}
             </table>
         </div>`;
     } else {
