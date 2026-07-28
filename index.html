@@ -130,14 +130,25 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
             
             <!-- Submit section at bottom of studies page -->
             <div id="studiesExportSection" style="margin-top: 32px; border-top: 1px solid #e5e7eb; padding-top: 24px;">
+                <div style="background: #f0f9ff; border: 1px solid #3b82f6; border-radius: 8px; padding: 14px 18px; margin-bottom: 16px;">
+                    <p style="font-size: 14px; color: #1e40af; margin: 0; font-weight: 500;">Save &amp; Resume Progress</p>
+                    <p style="font-size: 12px; color: #1e40af; margin: 6px 0 0 0;">Your work auto-saves in the browser, but you can also save a backup file. If your browser data is lost, use Import to resume.</p>
+                </div>
+                <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px;">
+                    <button class="nav-btn" onclick="exportTrims()" style="padding: 10px 18px; font-size: 13px; background: #1a1a2e; color: white;">Save Progress (Download Backup)</button>
+                    <label style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500;">
+                        Import Progress
+                        <input type="file" accept=".json" onchange="importProgress(event)" style="display:none;">
+                    </label>
+                </div>
+
                 <div style="background: #fffbeb; border: 1px solid #f59e0b; border-radius: 8px; padding: 14px 18px; margin-bottom: 16px;">
                     <p style="font-size: 14px; color: #92400e; margin: 0; font-weight: 500;">When you have finished reviewing all studies:</p>
                     <ol style="font-size: 13px; color: #92400e; margin: 10px 0 0 0; padding-left: 18px; line-height: 1.8;">
-                        <li>Click the <strong>Download My Trims</strong> button below</li>
+                        <li>Click <strong>Save Progress</strong> above to download your final JSON</li>
                         <li>Send the downloaded JSON file to <strong>Javi</strong> via Slack or email</li>
                     </ol>
                 </div>
-                <button class="nav-btn primary" onclick="exportTrims()" style="padding: 12px 24px; font-size: 14px;">Download My Trims (JSON)</button>
             </div>
         </div>
     </div>
@@ -1087,6 +1098,33 @@ function exportTrims() {
 
 function exportAllTrims() {
     downloadJSON(allTrims, 'polar_irr_trims_all.json');
+}
+
+function importProgress(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (!currentReviewer || currentReviewer === 'admin') { alert('Sign in as a reviewer first'); return; }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = JSON.parse(e.target.result);
+            let imported = 0;
+            Object.entries(data).forEach(([sid, trims]) => {
+                if (STUDIES[sid] && Array.isArray(trims)) {
+                    const key = `${currentReviewer}__${sid}`;
+                    allTrims[key] = trims;
+                    imported += trims.length;
+                }
+            });
+            saveTrims();
+            alert(`Imported ${imported} trims across ${Object.keys(data).length} studies for ${currentReviewer}.`);
+            if (document.getElementById('tab-studies').style.display !== 'none') renderStudyList();
+        } catch(err) {
+            alert('Invalid JSON file.');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
 }
 
 function downloadJSON(data, filename) {
