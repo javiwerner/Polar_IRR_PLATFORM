@@ -499,9 +499,12 @@ function onChartClick(data) {
         const end = clickedTime;
         const start = trimStart;
         const [s, e] = start < end ? [start, end] : [end, start];
-        const reason = prompt('Note (optional):');
-        if (reason === null) { trimStart = null; document.getElementById('trimModeLabel').textContent = 'Click chart to mark start of bad region'; return; }
-        addTrim(currentStudy, s, e, reason);
+        let reason = '';
+        while (!reason.trim()) {
+            reason = prompt('Note (required) — describe why this region is bad signal:');
+            if (reason === null) { trimStart = null; document.getElementById('trimModeLabel').textContent = 'Click chart to mark start of bad region'; return; }
+        }
+        addTrim(currentStudy, s, e, reason.trim());
         trimStart = null;
         document.getElementById('trimModeLabel').textContent = 'Click chart to mark start of bad region';
         renderChart(STUDIES[currentStudy]);
