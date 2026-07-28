@@ -182,7 +182,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div id="tab-dashboard" class="tab-content" style="display:none">
         <div class="card">
             <h2 style="margin-bottom: 8px;">Inter-Rater Reliability Dashboard</h2>
-            <p style="font-size: 13px; color: #6b7280; margin-bottom: 16px;">Upload each researcher's exported JSON file below. Once 2+ files are loaded, agreement metrics will compute automatically.</p>
+            <p style="font-size: 13px; color: #6b7280; margin-bottom: 16px;">Upload each reviewer's exported JSON file below. Once 2+ files are loaded, agreement metrics will compute automatically.</p>
             
             <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 20px; flex-wrap: wrap;">
                 <label style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; background: #1a1a2e; color: white; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500;">
@@ -656,6 +656,13 @@ function handleIRRUpload(event) {
     }
 }
 
+function removeReviewer(name) {
+    delete irrData[name];
+    document.getElementById('irrUploadStatus').textContent = Object.keys(irrData).length > 0 ? `${Object.keys(irrData).length} reviewer(s) loaded` : 'No files loaded';
+    renderDashboard();
+    if (Object.keys(irrData).length < 2) document.getElementById('irrResults').innerHTML = '';
+}
+
 function renderIRRReviewerList() {
     const container = document.getElementById('irrReviewerList');
     const names = Object.keys(irrData);
@@ -664,16 +671,34 @@ function renderIRRReviewerList() {
         names.map(n => {
             const studyCount = Object.keys(irrData[n]).length;
             const trimCount = Object.values(irrData[n]).reduce((sum, arr) => sum + arr.length, 0);
-            return `<div style="font-size: 13px; padding: 4px 0; color: #374151;">• ${n} — ${studyCount} studies, ${trimCount} trims</div>`;
+            return `<div style="display:flex; align-items:center; gap:8px; font-size: 13px; padding: 4px 0; color: #374151;">
+                <span>• ${n} — ${studyCount} studies, ${trimCount} trims</span>
+                <button onclick="removeReviewer('${n.replace(/'/g, "\\'")}')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:16px;line-height:1;padding:2px 6px;border-radius:4px;" title="Remove reviewer">&times;</button>
+            </div>`;
         }).join('');
+}
+
+const REVIEWER_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'];
+
+function getAgreementBand(value) {
+    if (value < 0.20) return { label: 'Poor', color: '#ef4444' };
+    if (value < 0.40) return { label: 'Fair', color: '#f97316' };
+    if (value < 0.60) return { label: 'Moderate', color: '#eab308' };
+    if (value < 0.80) return { label: 'Substantial', color: '#22c55e' };
+    return { label: 'Almost Perfect', color: '#15803d' };
+}
+
+function formatSeconds(s) {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
 }
 
 function computeIRR() {
     const reviewers = Object.keys(irrData);
     const studyIds = Object.keys(STUDIES);
     const container = document.getElementById('irrResults');
-    
-    // Per-second discretization for each reviewer
+
     function getSecondBins(trims, study) {
         const startMs = new Date(study.polar.ts[0]).getTime();
         const endMs = new Date(study.polar.ts[study.polar.ts.length - 1]).getTime();
@@ -686,10 +711,52 @@ function computeIRR() {
         });
         return bins;
     }
-    
-    // Pairwise IoU
+
+    // Per-study metrics
+    const studyMetrics = [];
     let totalIntersection = 0, totalUnion = 0;
     const pairResults = [];
+    const reviewerStats = reviewers.map(() => ({ flaggedSec: 0, regionCount: 0, totalSec: 0 }));
+
+    studyIds.forEach(sid => {
+        const study = STUDIES[sid];
+        const startMs = new Date(study.polar.ts[0]).getTime();
+        const endMs = new Date(study.polar.ts[study.polar.ts.length - 1]).getTime();
+        const duration = Math.ceil((endMs - startMs) / 1000);
+        const allBins = reviewers.map((r, ri) => {
+            const trims = irrData[r][sid] || [];
+            reviewerStats[ri].regionCount += trims.length;
+            reviewerStats[ri].totalSec += duration;
+            const bins = getSecondBins(trims, study);
+            const flagged = bins.reduce((s, v) => s + v, 0);
+            reviewerStats[ri].flaggedSec += flagged;
+            return bins;
+        });
+
+        // Per-study IoU (union of all pairs)
+        let sInt = 0, sUni = 0;
+        for (let i = 0; i < duration; i++) {
+            const anyFlagged = allBins.some(b => b[i]);
+            const allFlagged = allBins.every(b => b[i]);
+            if (anyFlagged) sUni++;
+            if (allFlagged) sInt++;
+        }
+        const studyIoU = sUni > 0 ? sInt / sUni : (allBins.every(b => b.reduce((s,v)=>s+v,0) === 0) ? 1 : 0);
+
+        // Per-study flagged %
+        const avgFlagged = allBins.reduce((s, b) => s + b.reduce((ss, v) => ss + v, 0), 0) / reviewers.length;
+        const flaggedPct = duration > 0 ? (avgFlagged / duration) * 100 : 0;
+
+        // Per-reviewer region counts for this study
+        const regionsPerReviewer = reviewers.map(r => (irrData[r][sid] || []).length);
+
+        studyMetrics.push({
+            sid, campaign: study.campaign || '—', duration, studyIoU, flaggedPct, regionsPerReviewer,
+            allBins, startMs, endMs
+        });
+    });
+
+    // Global pairwise IoU
     for (let a = 0; a < reviewers.length; a++) {
         for (let b = a + 1; b < reviewers.length; b++) {
             let pairInt = 0, pairUni = 0;
@@ -706,49 +773,199 @@ function computeIRR() {
             pairResults.push({ a: reviewers[a], b: reviewers[b], iou });
         }
     }
-    
-    // Fleiss' Kappa (binary: bad/not-bad per second)
+
+    // Fleiss' Kappa
     let totalN = 0, sumP = 0;
-    const categoryTotals = [0, 0]; // [not-bad, bad]
+    const categoryTotals = [0, 0];
     studyIds.forEach(sid => {
         const study = STUDIES[sid];
         const allBins = reviewers.map(r => getSecondBins(irrData[r][sid], study));
         const duration = allBins[0].length;
-        const n = reviewers.length;
+        const nR = reviewers.length;
         for (let i = 0; i < duration; i++) {
             const bad = allBins.reduce((s, b) => s + b[i], 0);
-            const notBad = n - bad;
+            const notBad = nR - bad;
             categoryTotals[0] += notBad;
             categoryTotals[1] += bad;
             sumP += (bad * (bad - 1) + notBad * (notBad - 1));
             totalN++;
         }
     });
-    const n = reviewers.length;
-    const Pbar = totalN > 0 ? sumP / (totalN * n * (n - 1)) : 0;
-    const totalRatings = totalN * n;
+    const nR = reviewers.length;
+    const Pbar = totalN > 0 ? sumP / (totalN * nR * (nR - 1)) : 0;
+    const totalRatings = totalN * nR;
     const Pe = Math.pow(categoryTotals[0] / totalRatings, 2) + Math.pow(categoryTotals[1] / totalRatings, 2);
     const kappa = Pe < 1 ? (Pbar - Pe) / (1 - Pe) : 1;
     const overallIoU = totalUnion > 0 ? totalIntersection / totalUnion : 0;
-    
-    container.innerHTML = `
-        <h3 style="margin-bottom: 12px;">Agreement Metrics</h3>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
-            <div style="padding: 16px; background: #f9fafb; border-radius: 8px; text-align: center;">
-                <div style="font-size: 28px; font-weight: 700; color: #1a1a2e;">${kappa.toFixed(3)}</div>
-                <div style="font-size: 12px; color: #6b7280;">Fleiss' Kappa</div>
-            </div>
-            <div style="padding: 16px; background: #f9fafb; border-radius: 8px; text-align: center;">
-                <div style="font-size: 28px; font-weight: 700; color: #1a1a2e;">${(overallIoU * 100).toFixed(1)}%</div>
-                <div style="font-size: 12px; color: #6b7280;">Overall IoU</div>
-            </div>
+
+    const kappaBand = getAgreementBand(kappa);
+    const iouBand = getAgreementBand(overallIoU);
+
+    // Agreement distribution
+    const bands = { 'Poor': 0, 'Fair': 0, 'Moderate': 0, 'Substantial': 0, 'Almost Perfect': 0 };
+    studyMetrics.forEach(sm => { bands[getAgreementBand(sm.studyIoU).label]++; });
+
+    // Reviewer stats
+    const avgFlagRate = reviewerStats.reduce((s, r) => s + (r.totalSec > 0 ? r.flaggedSec / r.totalSec : 0), 0) / reviewers.length;
+
+    // Build HTML
+    let html = '';
+
+    // --- Section 1: Summary Metrics ---
+    html += `<h3 style="margin-bottom:12px; font-size:16px;">Overall Agreement</h3>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:24px;">
+        <div style="padding:20px; background:#f9fafb; border-radius:10px; text-align:center; border-left:4px solid ${kappaBand.color};">
+            <div style="font-size:32px; font-weight:700; color:${kappaBand.color};">${kappa.toFixed(3)}</div>
+            <div style="font-size:13px; font-weight:600; color:${kappaBand.color}; margin:4px 0;">${kappaBand.label} Agreement</div>
+            <div style="font-size:11px; color:#6b7280;">Fleiss' Kappa — chance-corrected agreement across all reviewers</div>
         </div>
-        <h3 style="margin-bottom: 8px;">Pairwise IoU</h3>
-        <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
-            <tr style="border-bottom: 1px solid #e5e7eb;"><th style="text-align:left; padding: 6px 0;">Pair</th><th style="text-align:right; padding: 6px 0;">IoU</th></tr>
-            ${pairResults.map(p => `<tr style="border-bottom: 1px solid #f3f4f6;"><td style="padding: 6px 0;">${p.a} vs ${p.b}</td><td style="text-align:right; padding: 6px 0;">${(p.iou * 100).toFixed(1)}%</td></tr>`).join('')}
-        </table>
-    `;
+        <div style="padding:20px; background:#f9fafb; border-radius:10px; text-align:center; border-left:4px solid ${iouBand.color};">
+            <div style="font-size:32px; font-weight:700; color:${iouBand.color};">${(overallIoU * 100).toFixed(1)}%</div>
+            <div style="font-size:13px; font-weight:600; color:${iouBand.color}; margin:4px 0;">${iouBand.label} Overlap</div>
+            <div style="font-size:11px; color:#6b7280;">IoU — intersection over union of all flagged regions</div>
+        </div>
+    </div>`;
+
+    // --- Section 2: Pairwise IoU ---
+    html += `<h3 style="margin-bottom:8px; font-size:14px;">Pairwise Agreement</h3>
+    <table style="width:100%; font-size:13px; border-collapse:collapse; margin-bottom:24px;">
+        <tr style="border-bottom:1px solid #e5e7eb;"><th style="text-align:left;padding:6px 0;">Pair</th><th style="text-align:right;padding:6px 0;">IoU</th><th style="text-align:right;padding:6px 0;">Level</th></tr>
+        ${pairResults.map(p => {
+            const band = getAgreementBand(p.iou);
+            return `<tr style="border-bottom:1px solid #f3f4f6;"><td style="padding:6px 0;">${p.a} vs ${p.b}</td><td style="text-align:right;padding:6px 0;">${(p.iou * 100).toFixed(1)}%</td><td style="text-align:right;padding:6px 0;color:${band.color};font-weight:500;">${band.label}</td></tr>`;
+        }).join('')}
+    </table>`;
+
+    // --- Section 3: Reviewer Stats ---
+    html += `<h3 style="margin-bottom:8px; font-size:14px;">Reviewer Comparison</h3>
+    <table style="width:100%; font-size:13px; border-collapse:collapse; margin-bottom:24px;">
+        <tr style="border-bottom:1px solid #e5e7eb;">
+            <th style="text-align:left;padding:6px 0;">Reviewer</th>
+            <th style="text-align:right;padding:6px 0;">Regions</th>
+            <th style="text-align:right;padding:6px 0;">Flagged Time</th>
+            <th style="text-align:right;padding:6px 0;">Flag Rate</th>
+            <th style="text-align:right;padding:6px 0;">Status</th>
+        </tr>
+        ${reviewers.map((r, i) => {
+            const rate = reviewerStats[i].totalSec > 0 ? reviewerStats[i].flaggedSec / reviewerStats[i].totalSec : 0;
+            const isOutlier = avgFlagRate > 0 && (rate > avgFlagRate * 2 || rate < avgFlagRate * 0.5);
+            return `<tr style="border-bottom:1px solid #f3f4f6;">
+                <td style="padding:6px 0;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${REVIEWER_COLORS[i % REVIEWER_COLORS.length]};margin-right:6px;"></span>${r}</td>
+                <td style="text-align:right;padding:6px 0;">${reviewerStats[i].regionCount}</td>
+                <td style="text-align:right;padding:6px 0;">${formatSeconds(reviewerStats[i].flaggedSec)}</td>
+                <td style="text-align:right;padding:6px 0;">${(rate * 100).toFixed(1)}%</td>
+                <td style="text-align:right;padding:6px 0;color:${isOutlier ? '#f97316' : '#22c55e'};font-weight:500;">${isOutlier ? 'Outlier' : 'Normal'}</td>
+            </tr>`;
+        }).join('')}
+    </table>`;
+
+    // --- Section 4: Agreement Distribution ---
+    const totalStudies = studyMetrics.length;
+    const bandColors = { 'Poor': '#ef4444', 'Fair': '#f97316', 'Moderate': '#eab308', 'Substantial': '#22c55e', 'Almost Perfect': '#15803d' };
+    html += `<h3 style="margin-bottom:8px; font-size:14px;">Agreement Distribution</h3>
+    <div style="display:flex; gap:4px; height:28px; border-radius:6px; overflow:hidden; margin-bottom:6px;">
+        ${Object.entries(bands).map(([label, count]) => count > 0 ? `<div style="flex:${count};background:${bandColors[label]};"></div>` : '').join('')}
+    </div>
+    <div style="display:flex; gap:12px; flex-wrap:wrap; font-size:11px; color:#6b7280; margin-bottom:24px;">
+        ${Object.entries(bands).map(([label, count]) => count > 0 ? `<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${bandColors[label]};margin-right:4px;"></span>${label}: ${count} studies</span>` : '').join('')}
+    </div>`;
+
+    // --- Section 5: Per-Study Breakdown ---
+    html += `<h3 style="margin-bottom:8px; font-size:14px;">Per-Study Breakdown</h3>
+    <p style="font-size:11px; color:#6b7280; margin-bottom:12px;">Click a study row to expand the timeline comparison and annotation details.</p>
+    <table style="width:100%; font-size:12px; border-collapse:collapse; margin-bottom:24px;">
+        <tr style="border-bottom:1px solid #e5e7eb; background:#f9fafb;">
+            <th style="text-align:left;padding:8px 6px;">Study</th>
+            <th style="text-align:left;padding:8px 6px;">Campaign</th>
+            <th style="text-align:right;padding:8px 6px;">Duration</th>
+            <th style="text-align:right;padding:8px 6px;">Flagged %</th>
+            <th style="text-align:right;padding:8px 6px;">IoU</th>
+            <th style="text-align:right;padding:8px 6px;">Agreement</th>
+        </tr>
+        ${studyMetrics.map((sm, idx) => {
+            const band = getAgreementBand(sm.studyIoU);
+            const noFlags = sm.allBins.every(b => b.reduce((s,v)=>s+v,0) === 0);
+            return `<tr style="border-bottom:1px solid #f3f4f6; cursor:pointer;" onclick="toggleStudyDetail(${idx})">
+                <td style="padding:8px 6px; font-weight:500;">${sm.sid}</td>
+                <td style="padding:8px 6px;">${sm.campaign}</td>
+                <td style="text-align:right;padding:8px 6px;">${formatSeconds(sm.duration)}</td>
+                <td style="text-align:right;padding:8px 6px;">${sm.flaggedPct.toFixed(1)}%</td>
+                <td style="text-align:right;padding:8px 6px;">${noFlags ? '—' : (sm.studyIoU * 100).toFixed(1) + '%'}</td>
+                <td style="text-align:right;padding:8px 6px;color:${band.color};font-weight:500;">${noFlags ? 'All Clear' : band.label}</td>
+            </tr>
+            <tr id="studyDetail_${idx}" style="display:none;">
+                <td colspan="6" style="padding:12px 6px; background:#fafafa;"></td>
+            </tr>`;
+        }).join('')}
+    </table>`;
+
+    container.innerHTML = html;
+
+    // Store metrics for detail expansion
+    window._irrStudyMetrics = studyMetrics;
+    window._irrReviewers = reviewers;
+}
+
+function toggleStudyDetail(idx) {
+    const row = document.getElementById('studyDetail_' + idx);
+    if (!row) return;
+    if (row.style.display === 'none') {
+        row.style.display = '';
+        const sm = window._irrStudyMetrics[idx];
+        const reviewers = window._irrReviewers;
+        const cell = row.querySelector('td');
+        const duration = sm.duration;
+
+        // Timeline bars
+        let timeline = '<div style="margin-bottom:12px;"><strong style="font-size:12px;">Timeline Comparison</strong></div>';
+        reviewers.forEach((r, ri) => {
+            const trims = irrData[r][sm.sid] || [];
+            const color = REVIEWER_COLORS[ri % REVIEWER_COLORS.length];
+            timeline += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                <span style="font-size:11px;width:80px;flex-shrink:0;color:#374151;">${r}</span>
+                <div style="position:relative;flex:1;height:18px;background:#e5e7eb;border-radius:3px;overflow:hidden;">
+                    ${trims.map(t => {
+                        const tStart = Math.max(0, (new Date(t.start).getTime() - sm.startMs) / 1000);
+                        const tEnd = Math.min(duration, (new Date(t.end).getTime() - sm.startMs) / 1000);
+                        const left = (tStart / duration) * 100;
+                        const width = ((tEnd - tStart) / duration) * 100;
+                        return `<div style="position:absolute;left:${left}%;width:${width}%;height:100%;background:${color};opacity:0.7;border-radius:2px;" title="${formatSeconds(Math.round(tStart))} — ${formatSeconds(Math.round(tEnd))}${t.note ? ': ' + t.note : ''}"></div>`;
+                    }).join('')}
+                </div>
+            </div>`;
+        });
+
+        // Time axis labels
+        const steps = 5;
+        timeline += `<div style="display:flex;align-items:center;gap:8px;margin-top:2px;">
+            <span style="width:80px;flex-shrink:0;"></span>
+            <div style="flex:1;display:flex;justify-content:space-between;font-size:10px;color:#9ca3af;">
+                ${Array.from({length: steps + 1}, (_, i) => `<span>${formatSeconds(Math.round(duration * i / steps))}</span>`).join('')}
+            </div>
+        </div>`;
+
+        // Annotation details
+        let details = '<div style="margin-top:16px;"><strong style="font-size:12px;">Annotations</strong></div>';
+        details += '<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;margin-top:8px;">';
+        reviewers.forEach((r, ri) => {
+            const trims = irrData[r][sm.sid] || [];
+            const color = REVIEWER_COLORS[ri % REVIEWER_COLORS.length];
+            details += `<div style="font-size:11px;">
+                <div style="font-weight:600;margin-bottom:4px;color:${color};">${r}</div>
+                ${trims.length === 0 ? '<div style="color:#9ca3af;font-style:italic;">No regions flagged</div>' :
+                trims.map(t => {
+                    const tStart = Math.max(0, (new Date(t.start).getTime() - sm.startMs) / 1000);
+                    const tEnd = Math.min(duration, (new Date(t.end).getTime() - sm.startMs) / 1000);
+                    return `<div style="padding:3px 0;border-bottom:1px solid #f3f4f6;">${formatSeconds(Math.round(tStart))} → ${formatSeconds(Math.round(tEnd))}${t.note ? ' <span style="color:#6b7280;">(' + t.note + ')</span>' : ''}</div>`;
+                }).join('')}
+            </div>`;
+        });
+        details += '</div>';
+
+        cell.innerHTML = timeline + details;
+    } else {
+        row.style.display = 'none';
+    }
 }
 
 // ============================================================
