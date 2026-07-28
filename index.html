@@ -870,7 +870,92 @@ function computeIRR() {
         ${Object.entries(bands).map(([label, count]) => count > 0 ? `<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${bandColors[label]};margin-right:4px;"></span>${label}: ${count} studies</span>` : '').join('')}
     </div>`;
 
-    // --- Section 5: Per-Study Breakdown ---
+    // --- Section 5: Reasons Analysis ---
+    // Find overlapping regions across reviewers and compare their notes
+    const overlappingRegions = [];
+    const allNotes = [];
+    studyIds.forEach(sid => {
+        const study = STUDIES[sid];
+        const startMs = new Date(study.polar.ts[0]).getTime();
+        const duration = Math.ceil((new Date(study.polar.ts[study.polar.ts.length - 1]).getTime() - startMs) / 1000);
+        // Collect all trims with reviewer attribution
+        const allTrims = [];
+        reviewers.forEach(r => {
+            (irrData[r][sid] || []).forEach(t => {
+                const note = (t.note || '').trim();
+                if (note) allNotes.push(note);
+                allTrims.push({ reviewer: r, start: Math.max(0, (new Date(t.start).getTime() - startMs) / 1000), end: Math.min(duration, (new Date(t.end).getTime() - startMs) / 1000), note });
+            });
+        });
+        // Find clusters: trims that overlap in time from different reviewers
+        for (let i = 0; i < allTrims.length; i++) {
+            const cluster = [allTrims[i]];
+            for (let j = i + 1; j < allTrims.length; j++) {
+                if (allTrims[j].reviewer === allTrims[i].reviewer) continue;
+                if (allTrims[j].start < allTrims[i].end && allTrims[j].end > allTrims[i].start) {
+                    if (!cluster.find(c => c.reviewer === allTrims[j].reviewer)) {
+                        cluster.push(allTrims[j]);
+                    }
+                }
+            }
+            if (cluster.length >= 2 && cluster.some(c => c.note)) {
+                const key = sid + '_' + Math.round(cluster[0].start);
+                if (!overlappingRegions.find(o => o.key === key)) {
+                    overlappingRegions.push({ key, sid, cluster, startSec: Math.min(...cluster.map(c=>c.start)), endSec: Math.max(...cluster.map(c=>c.end)) });
+                }
+            }
+        }
+    });
+
+    // Note frequency
+    const noteFreq = {};
+    allNotes.forEach(n => {
+        const lower = n.toLowerCase();
+        noteFreq[lower] = (noteFreq[lower] || { text: n, count: 0 });
+        noteFreq[lower].count++;
+    });
+    const sortedNotes = Object.values(noteFreq).sort((a, b) => b.count - a.count);
+
+    html += `<h3 style="margin-bottom:8px; font-size:14px;">Reasons Analysis</h3>`;
+
+    // Frequency table
+    if (sortedNotes.length > 0) {
+        html += `<div style="margin-bottom:16px;">
+            <strong style="font-size:12px; color:#374151;">Most Common Reasons</strong>
+            <table style="width:100%; font-size:12px; border-collapse:collapse; margin-top:6px;">
+                <tr style="border-bottom:1px solid #e5e7eb; background:#f9fafb;"><th style="text-align:left;padding:6px;">Reason</th><th style="text-align:right;padding:6px;">Count</th></tr>
+                ${sortedNotes.slice(0, 15).map(n => `<tr style="border-bottom:1px solid #f3f4f6;"><td style="padding:6px;">${n.text}</td><td style="text-align:right;padding:6px;font-weight:500;">${n.count}</td></tr>`).join('')}
+            </table>
+        </div>`;
+    } else {
+        html += `<p style="font-size:12px; color:#9ca3af; margin-bottom:16px;">No notes provided by any reviewer.</p>`;
+    }
+
+    // Overlapping regions comparison
+    if (overlappingRegions.length > 0) {
+        html += `<div style="margin-bottom:24px;">
+            <strong style="font-size:12px; color:#374151;">Compared Reasons on Overlapping Regions</strong>
+            <p style="font-size:11px; color:#6b7280; margin:4px 0 8px;">Where 2+ reviewers flagged the same time region — what did each say?</p>
+            <table style="width:100%; font-size:11px; border-collapse:collapse;">
+                <tr style="border-bottom:1px solid #e5e7eb; background:#f9fafb;">
+                    <th style="text-align:left;padding:6px;">Study</th>
+                    <th style="text-align:left;padding:6px;">Time Range</th>
+                    ${reviewers.map((r, i) => `<th style="text-align:left;padding:6px;color:${REVIEWER_COLORS[i % REVIEWER_COLORS.length]};">${r}</th>`).join('')}
+                </tr>
+                ${overlappingRegions.slice(0, 40).map(o => `<tr style="border-bottom:1px solid #f3f4f6;">
+                    <td style="padding:6px;font-weight:500;">${o.sid}</td>
+                    <td style="padding:6px;">${formatSeconds(Math.round(o.startSec))} → ${formatSeconds(Math.round(o.endSec))}</td>
+                    ${reviewers.map(r => {
+                        const match = o.cluster.find(c => c.reviewer === r);
+                        return `<td style="padding:6px;color:${match && match.note ? '#374151' : '#d1d5db'};">${match ? (match.note || '—') : ''}</td>`;
+                    }).join('')}
+                </tr>`).join('')}
+            </table>
+            ${overlappingRegions.length > 40 ? `<p style="font-size:11px;color:#6b7280;margin-top:4px;">Showing 40 of ${overlappingRegions.length} overlapping regions.</p>` : ''}
+        </div>`;
+    }
+
+    // --- Section 6: Per-Study Breakdown ---
     html += `<h3 style="margin-bottom:8px; font-size:14px;">Per-Study Breakdown</h3>
     <p style="font-size:11px; color:#6b7280; margin-bottom:12px;">Click a study row to expand the timeline comparison and annotation details.</p>
     <table style="width:100%; font-size:12px; border-collapse:collapse; margin-bottom:24px;">
