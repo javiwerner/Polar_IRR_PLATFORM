@@ -882,7 +882,7 @@ function computeIRR() {
         const allTrims = [];
         reviewers.forEach(r => {
             (irrData[r][sid] || []).forEach(t => {
-                const note = (t.note || '').trim();
+                const note = (t.note || t.reason || '').trim();
                 if (note) allNotes.push(note);
                 allTrims.push({ reviewer: r, start: Math.max(0, (new Date(t.start).getTime() - startMs) / 1000), end: Math.min(duration, (new Date(t.end).getTime() - startMs) / 1000), note });
             });
@@ -1014,7 +1014,7 @@ function toggleStudyDetail(idx) {
                         const tEnd = Math.min(duration, (new Date(t.end).getTime() - sm.startMs) / 1000);
                         const left = (tStart / duration) * 100;
                         const width = ((tEnd - tStart) / duration) * 100;
-                        return `<div style="position:absolute;left:${left}%;width:${width}%;height:100%;background:${color};opacity:0.7;border-radius:2px;" title="${formatSeconds(Math.round(tStart))} — ${formatSeconds(Math.round(tEnd))}${t.note ? ': ' + t.note : ''}"></div>`;
+                        return `<div style="position:absolute;left:${left}%;width:${width}%;height:100%;background:${color};opacity:0.7;border-radius:2px;" title="${formatSeconds(Math.round(tStart))} — ${formatSeconds(Math.round(tEnd))}${(t.note || t.reason) ? ': ' + (t.note || t.reason) : ''}"></div>`;
                     }).join('')}
                 </div>
             </div>`;
@@ -1041,7 +1041,7 @@ function toggleStudyDetail(idx) {
                 trims.map(t => {
                     const tStart = Math.max(0, (new Date(t.start).getTime() - sm.startMs) / 1000);
                     const tEnd = Math.min(duration, (new Date(t.end).getTime() - sm.startMs) / 1000);
-                    return `<div style="padding:3px 0;border-bottom:1px solid #f3f4f6;">${formatSeconds(Math.round(tStart))} → ${formatSeconds(Math.round(tEnd))}${t.note ? ' <span style="color:#6b7280;">(' + t.note + ')</span>' : ''}</div>`;
+                    return `<div style="padding:3px 0;border-bottom:1px solid #f3f4f6;">${formatSeconds(Math.round(tStart))} → ${formatSeconds(Math.round(tEnd))}${(t.note || t.reason) ? ' <span style="color:#6b7280;">(' + (t.note || t.reason) + ')</span>' : ''}</div>`;
                 }).join('')}
             </div>`;
         });
