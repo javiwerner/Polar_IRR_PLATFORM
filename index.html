@@ -161,6 +161,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
                 <select id="studySelect" onchange="loadStudy(this.value)" style="padding: 8px 14px; border-radius: 8px; border: 1px solid #d1d5db; font-size: 14px; min-width: 200px;"></select>
                 <button class="nav-btn" onclick="nextStudy()">Next &rarr;</button>
                 <span class="info" id="studyInfo"></span>
+                <span id="progressRing" style="margin-left:auto; display:flex; align-items:center; gap:6px;"></span>
             </div>
             <div class="instructions">
                 Select regions where POLAR strap data fails to meet gold standard expectations.
@@ -406,6 +407,7 @@ function loadStudy(sid) {
     const dur = Math.round((study.duration_sec || 0) / 60);
     document.getElementById('studyInfo').textContent = `${campShort} · ${dur} min`;
     document.getElementById('studySelect').value = sid;
+    updateProgressRing();
     
     renderChart(study);
     renderTrimList();
@@ -595,7 +597,28 @@ function deleteTrim(studyId, index) {
 function saveTrims() {
     localStorage.setItem('irr_trims', JSON.stringify(allTrims));
     updateProgress();
+    updateProgressRing();
     renderStudyTable();
+}
+
+function updateProgressRing() {
+    const el = document.getElementById('progressRing');
+    if (!el || !currentReviewer || currentReviewer === 'admin') { if (el) el.innerHTML = ''; return; }
+    const total = Object.keys(STUDIES).length;
+    const reviewed = Object.keys(STUDIES).filter(sid => {
+        const key = `${currentReviewer}__${sid}`;
+        return allTrims[key] && allTrims[key].length > 0;
+    }).length;
+    const pct = total > 0 ? reviewed / total : 0;
+    const r = 14, stroke = 3;
+    const circ = 2 * Math.PI * r;
+    const offset = circ * (1 - pct);
+    el.innerHTML = `
+        <svg width="36" height="36" style="transform:rotate(-90deg);">
+            <circle cx="18" cy="18" r="${r}" fill="none" stroke="#e5e7eb" stroke-width="${stroke}"/>
+            <circle cx="18" cy="18" r="${r}" fill="none" stroke="${pct >= 1 ? '#22c55e' : '#3b82f6'}" stroke-width="${stroke}" stroke-dasharray="${circ}" stroke-dashoffset="${offset}" stroke-linecap="round"/>
+        </svg>
+        <span style="font-size:11px; color:#6b7280;">${reviewed}/${total}</span>`;
 }
 
 function renderTrimList() {
