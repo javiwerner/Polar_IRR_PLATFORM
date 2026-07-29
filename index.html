@@ -1084,15 +1084,15 @@ function computeIRR() {
     // Theme extraction — normalize variations into 5 canonical categories
     const THEMES = [
         { canonical: 'Multi-device disagreement', description: 'Polar reading inconsistent with WHOOP reference devices',
-          patterns: ['multi device', 'multidevice', 'multi-device', 'multidevce', 'inconsistent with', 'other 3 device', 'other devices', 'whoop device', 'discrepancy', 'disgreement', 'disagreement'] },
+          patterns: ['multi device', 'multidevice', 'multi-device', 'multidevce', 'inconsistent with', 'other 3 device', 'other devices', 'whoop device', 'discrepancy', 'disgreement', 'disagreement', 'bpm disagree'] },
         { canonical: 'Physiologically implausible', description: 'HR values or changes not biologically realistic',
-          patterns: ['physiolog', 'not realistic', 'unprobable', 'not probable', 'unlikely', 'unreliable', 'unrealistic', 'untrustworthy'] },
+          patterns: ['physiolog', 'not realistic', 'unprobable', 'not probable', 'unlikely', 'unreliable', 'unrealistic', 'untrustworthy', 'not right'] },
         { canonical: 'Poor signal shape / Stepwise', description: 'Flat lines, staircase pattern, or jagged non-smooth signal',
-          patterns: ['stepwise', 'poor plotting', 'plotting shape', 'jumpy', 'flat'] },
+          patterns: ['stepwise', 'poor plotting', 'plotting shape', 'jumpy', 'flat', 'visual cue', 'staircase'] },
         { canonical: 'Sudden spikes or dropouts', description: 'Dramatic or abrupt HR jumps, drops, or signal loss',
-          patterns: ['spike', 'dramatic', 'sudden', 'significant drop', 'significant raise', 'dropout', 'drop out', 'drops out'] },
+          patterns: ['spike', 'dramatic', 'sudden', 'significant drop', 'significant raise', 'significant hr', 'dropout', 'drop out', 'drops out', 'sramatic', 'anecdot', 'end of study'] },
         { canonical: 'Delayed or missed HR response', description: 'Polar fails to track expected HR changes seen on other devices',
-          patterns: ['delay', 'not following', 'not catching', 'missed', 'stays low', 'not caught'] },
+          patterns: ['delay', 'not following', 'not catching', 'missed', 'stays low', 'not caught', 'not track', 'low confidence'] },
     ];
     const themeCounts = THEMES.map(t => ({ ...t, count: 0, reviewerCounts: {} }));
     allNotes.forEach(n => {
@@ -1126,10 +1126,11 @@ function computeIRR() {
         html += `<div style="margin-bottom:20px;">
             <strong style="font-size:12px; color:#374151;">Distilled Themes</strong>
             <p style="font-size:11px; color:#6b7280; margin:4px 0 10px;">5 canonical failure categories distilled from all reviewer notes.</p>
-            ${activeThemes.map(t => `<div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
-                <div style="width:220px; flex-shrink:0;">
+            ${activeThemes.map(t => `<div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                <div style="width:240px; flex-shrink:0;">
                     <div style="font-size:12px; font-weight:600;">${t.canonical}</div>
-                    <div style="font-size:10px; color:#6b7280;">${t.description || ''}</div>
+                    <div style="font-size:10px; color:#6b7280; margin-top:2px;">${t.description || ''}</div>
+                    <div style="font-size:9px; color:#9ca3af; margin-top:3px;">Catches: ${t.patterns.map(p => '<b style="color:#374151;">' + p + '</b>').join(', ')}</div>
                 </div>
                 <div style="flex:1; height:20px; background:#f3f4f6; border-radius:4px; overflow:hidden; position:relative;">
                     <div style="height:100%; width:${(t.count / maxCount) * 100}%; background:#3b82f6; border-radius:4px;"></div>
