@@ -1114,14 +1114,14 @@ function toggleStudyDetail(idx) {
         const cell = row.querySelector('td');
         const duration = sm.duration;
 
-        // Timeline bars
-        let timeline = '<div style="margin-bottom:12px;"><strong style="font-size:12px;">Timeline Comparison</strong></div>';
+        // Timeline bars (will go under chart)
+        let timeline = '<div style="margin-top:4px;"><strong style="font-size:12px;">Flagged Regions</strong></div>';
         reviewers.forEach((r, ri) => {
             const trims = irrData[r][sm.sid] || [];
             const color = REVIEWER_COLORS[ri % REVIEWER_COLORS.length];
             timeline += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-                <span style="font-size:11px;width:80px;flex-shrink:0;color:#374151;">${r}</span>
-                <div style="position:relative;flex:1;height:18px;background:#e5e7eb;border-radius:3px;overflow:hidden;">
+                <span style="font-size:10px;width:40px;flex-shrink:0;color:#374151;text-align:right;">${r.replace('Reviewer ', 'R')}</span>
+                <div style="position:relative;flex:1;height:14px;background:#e5e7eb;border-radius:3px;overflow:hidden;">
                     ${trims.map(t => {
                         const tStart = Math.max(0, (new Date(t.start).getTime() - sm.startMs) / 1000);
                         const tEnd = Math.min(duration, (new Date(t.end).getTime() - sm.startMs) / 1000);
@@ -1133,14 +1133,7 @@ function toggleStudyDetail(idx) {
             </div>`;
         });
 
-        // Time axis labels
-        const steps = 5;
-        timeline += `<div style="display:flex;align-items:center;gap:8px;margin-top:2px;">
-            <span style="width:80px;flex-shrink:0;"></span>
-            <div style="flex:1;display:flex;justify-content:space-between;font-size:10px;color:#9ca3af;">
-                ${Array.from({length: steps + 1}, (_, i) => `<span>${formatSeconds(Math.round(duration * i / steps))}</span>`).join('')}
-            </div>
-        </div>`;
+        // No separate time axis — the chart x-axis above serves as reference
 
         // Annotation details
         let details = '<div style="margin-top:16px;"><strong style="font-size:12px;">Annotations</strong></div>';
@@ -1162,10 +1155,9 @@ function toggleStudyDetail(idx) {
 
         // HR chart
         const chartId = 'irrChart_' + idx;
-        let hrChart = `<div style="margin-top:16px;"><strong style="font-size:12px;">HR Traces</strong></div>
-            <div id="${chartId}" style="width:100%;height:200px;margin-top:8px;"></div>`;
+        let hrChart = `<div id="${chartId}" style="width:100%;height:200px;"></div>`;
 
-        cell.innerHTML = timeline + hrChart + details;
+        cell.innerHTML = hrChart + `<div style="margin-left:40px;margin-right:10px;">` + timeline + `</div>` + details;
 
         // Render mini Plotly chart
         const study = STUDIES[sm.sid];
