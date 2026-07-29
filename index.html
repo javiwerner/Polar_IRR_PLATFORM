@@ -1115,21 +1115,21 @@ function toggleStudyDetail(idx) {
         const duration = sm.duration;
 
         // Timeline bars (will go under chart)
-        let timeline = '<div style="margin-top:4px;"><strong style="font-size:12px;">Flagged Regions</strong></div>';
+        let timeline = '';
         reviewers.forEach((r, ri) => {
             const trims = irrData[r][sm.sid] || [];
             const color = REVIEWER_COLORS[ri % REVIEWER_COLORS.length];
-            timeline += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-                <span style="font-size:10px;width:40px;flex-shrink:0;color:#374151;text-align:right;">${r.replace('Reviewer ', 'R')}</span>
+            timeline += `<div style="display:flex;align-items:center;margin-bottom:3px;">
                 <div style="position:relative;flex:1;height:14px;background:#e5e7eb;border-radius:3px;overflow:hidden;">
                     ${trims.map(t => {
                         const tStart = Math.max(0, (new Date(t.start).getTime() - sm.startMs) / 1000);
                         const tEnd = Math.min(duration, (new Date(t.end).getTime() - sm.startMs) / 1000);
                         const left = (tStart / duration) * 100;
                         const width = ((tEnd - tStart) / duration) * 100;
-                        return `<div style="position:absolute;left:${left}%;width:${width}%;height:100%;background:${color};opacity:0.7;border-radius:2px;" title="${formatSeconds(Math.round(tStart))} — ${formatSeconds(Math.round(tEnd))}${(t.note || t.reason) ? ': ' + (t.note || t.reason) : ''}"></div>`;
+                        return `<div style="position:absolute;left:${left}%;width:${width}%;height:100%;background:${color};opacity:0.7;border-radius:2px;" title="${r}: ${formatSeconds(Math.round(tStart))} — ${formatSeconds(Math.round(tEnd))}${(t.note || t.reason) ? ': ' + (t.note || t.reason) : ''}"></div>`;
                     }).join('')}
                 </div>
+                <span style="font-size:10px;width:24px;flex-shrink:0;color:${color};text-align:left;margin-left:4px;font-weight:600;">${r.replace('Reviewer ', 'R')}</span>
             </div>`;
         });
 
@@ -1155,9 +1155,10 @@ function toggleStudyDetail(idx) {
 
         // HR chart
         const chartId = 'irrChart_' + idx;
+        const timelineId = 'irrTimeline_' + idx;
         let hrChart = `<div id="${chartId}" style="width:100%;height:200px;"></div>`;
 
-        cell.innerHTML = hrChart + `<div style="margin-left:40px;margin-right:10px;">` + timeline + `</div>` + details;
+        cell.innerHTML = hrChart + `<div id="${timelineId}">` + timeline + `</div>` + details;
 
         // Render mini Plotly chart
         const study = STUDIES[sm.sid];
@@ -1198,7 +1199,14 @@ function toggleStudyDetail(idx) {
             yaxis: { title: 'BPM', fixedrange: true },
             legend: { orientation: 'h', y: 1.15, font: { size: 10 } },
             shapes: miniShapes, hovermode: false
-        }, { responsive: true, displayModeBar: false, staticPlot: true });
+        }, { responsive: true, displayModeBar: false, staticPlot: true }).then(() => {
+            const chartEl = document.getElementById(chartId);
+            const xOffset = chartEl._fullLayout.xaxis._offset;
+            const xLength = chartEl._fullLayout.xaxis._length;
+            const tlEl = document.getElementById(timelineId);
+            tlEl.style.marginLeft = xOffset + 'px';
+            tlEl.style.width = xLength + 'px';
+        });
     } else {
         row.style.display = 'none';
         const chevron = document.getElementById('chevron_' + idx);
