@@ -667,11 +667,14 @@ function nextStudy() {
 // ============================================================
 // DASHBOARD
 // ============================================================
-let irrData = {}; // { reviewerName: { studyId: [{start, end, note},...] } }
+let irrData = JSON.parse(localStorage.getItem('irr_dashboard_data') || '{}');
+function saveIRRData() { localStorage.setItem('irr_dashboard_data', JSON.stringify(irrData)); }
 
 function renderDashboard() {
+    const count = Object.keys(irrData).length;
+    if (count > 0) document.getElementById('irrUploadStatus').textContent = `${count} reviewer(s) loaded`;
     renderIRRReviewerList();
-    if (Object.keys(irrData).length >= 2) computeIRR();
+    if (count >= 2) computeIRR();
 }
 
 function handleIRRUpload(event) {
@@ -686,6 +689,7 @@ function handleIRRUpload(event) {
                 irrData[name] = data;
                 loaded++;
                 if (loaded === files.length) {
+                    saveIRRData();
                     document.getElementById('irrUploadStatus').textContent = `${Object.keys(irrData).length} reviewer(s) loaded`;
                     renderDashboard();
                 }
@@ -699,6 +703,7 @@ function handleIRRUpload(event) {
 
 function removeReviewer(name) {
     delete irrData[name];
+    saveIRRData();
     document.getElementById('irrUploadStatus').textContent = Object.keys(irrData).length > 0 ? `${Object.keys(irrData).length} reviewer(s) loaded` : 'No files loaded';
     renderDashboard();
     if (Object.keys(irrData).length < 2) document.getElementById('irrResults').innerHTML = '';
