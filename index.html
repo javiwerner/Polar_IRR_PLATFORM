@@ -1082,7 +1082,7 @@ function computeIRR() {
             const band = getAgreementBand(sm.studyIoU);
             const noFlags = sm.allBins.every(b => b.reduce((s,v)=>s+v,0) === 0);
             return `<tr style="border-bottom:1px solid #f3f4f6; cursor:pointer;" onclick="toggleStudyDetail(${idx})">
-                <td style="padding:8px 6px; font-weight:500;">${sm.sid}</td>
+                <td style="padding:8px 6px; font-weight:500;"><span id="chevron_${idx}" style="display:inline-block;transition:transform 0.2s;margin-right:6px;font-size:10px;color:#9ca3af;">&#9654;</span>${sm.sid}</td>
                 <td style="padding:8px 6px;">${sm.campaign}</td>
                 <td style="text-align:right;padding:8px 6px;">${formatSeconds(sm.duration)}</td>
                 <td style="text-align:right;padding:8px 6px;">${sm.flaggedPct.toFixed(1)}%</td>
@@ -1107,6 +1107,8 @@ function toggleStudyDetail(idx) {
     if (!row) return;
     if (row.style.display === 'none') {
         row.style.display = '';
+        const chevron = document.getElementById('chevron_' + idx);
+        if (chevron) chevron.style.transform = 'rotate(90deg)';
         const sm = window._irrStudyMetrics[idx];
         const reviewers = window._irrReviewers;
         const cell = row.querySelector('td');
@@ -1161,6 +1163,8 @@ function toggleStudyDetail(idx) {
         cell.innerHTML = timeline + details;
     } else {
         row.style.display = 'none';
+        const chevron = document.getElementById('chevron_' + idx);
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
     }
 }
 
