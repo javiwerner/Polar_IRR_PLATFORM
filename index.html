@@ -193,18 +193,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <!-- Dashboard Tab -->
     <div id="tab-dashboard" class="tab-content" style="display:none">
         <div class="card">
-            <h2 style="margin-bottom: 8px;">Inter-Rater Reliability Dashboard</h2>
-            <p style="font-size: 13px; color: #6b7280; margin-bottom: 16px;">Upload each reviewer's exported JSON file below. Once 2+ files are loaded, agreement metrics will compute automatically.</p>
-            
-            <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 20px; flex-wrap: wrap;">
-                <label style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; background: #1a1a2e; color: white; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500;">
-                    Upload Reviewer JSON
-                    <input type="file" id="irrFileInput" accept=".json" multiple onchange="handleIRRUpload(event)" style="display:none;">
-                </label>
-                <span id="irrUploadStatus" style="font-size: 13px; color: #6b7280;">No files loaded</span>
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
+                <h2 style="margin:0;">Inter-Rater Reliability</h2>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <label style="display:inline-flex; align-items:center; gap:6px; padding:7px 14px; background:#1a1a2e; color:white; border-radius:6px; cursor:pointer; font-size:12px; font-weight:500;">
+                        Upload JSON
+                        <input type="file" id="irrFileInput" accept=".json" multiple onchange="handleIRRUpload(event)" style="display:none;">
+                    </label>
+                    <span id="irrUploadStatus" style="font-size:12px; color:#6b7280;">No files loaded</span>
+                </div>
             </div>
-            
-            <div id="irrReviewerList" style="margin-bottom: 20px;"></div>
+            <div id="irrReviewerList" style="margin-bottom:16px;"></div>
             <div id="irrResults"></div>
         </div>
     </div>
@@ -844,73 +843,197 @@ function computeIRR() {
     const kappaBand = getAgreementBand(kappa);
     const iouBand = getAgreementBand(overallIoU);
 
+    // Boundary-tolerant IoU (+/-5s dilation)
+    const TOLERANCE = 5;
+    let tolInt = 0, tolUni = 0;
+    for (let a = 0; a < reviewers.length; a++) {
+        for (let b = a + 1; b < reviewers.length; b++) {
+            studyIds.forEach(sid => {
+                const study = STUDIES[sid];
+                const binsA = getSecondBins(irrData[reviewers[a]][sid], study);
+                const binsB = getSecondBins(irrData[reviewers[b]][sid], study);
+                // Dilate bins by TOLERANCE
+                const dilA = new Array(binsA.length).fill(0);
+                const dilB = new Array(binsB.length).fill(0);
+                for (let i = 0; i < binsA.length; i++) {
+                    if (binsA[i]) for (let d = Math.max(0, i - TOLERANCE); d < Math.min(binsA.length, i + TOLERANCE + 1); d++) dilA[d] = 1;
+                    if (binsB[i]) for (let d = Math.max(0, i - TOLERANCE); d < Math.min(binsB.length, i + TOLERANCE + 1); d++) dilB[d] = 1;
+                }
+                for (let i = 0; i < dilA.length; i++) {
+                    if (dilA[i] || dilB[i]) tolUni++;
+                    if (dilA[i] && dilB[i]) tolInt++;
+                }
+            });
+        }
+    }
+    const tolerantIoU = tolUni > 0 ? tolInt / tolUni : 0;
+
+    // Per-campaign Kappa
+    const campaignGroups = {};
+    studyIds.forEach(sid => {
+        const camp = STUDIES[sid].campaign || 'Unknown';
+        if (!campaignGroups[camp]) campaignGroups[camp] = [];
+        campaignGroups[camp].push(sid);
+    });
+    const campaignKappas = Object.entries(campaignGroups).map(([camp, sids]) => {
+        let cTotalN = 0, cSumP = 0;
+        const cCatTotals = [0, 0];
+        sids.forEach(sid => {
+            const study = STUDIES[sid];
+            const allB = reviewers.map(r => getSecondBins(irrData[r][sid], study));
+            const dur = allB[0].length;
+            for (let i = 0; i < dur; i++) {
+                const bad = allB.reduce((s, b) => s + b[i], 0);
+                const notBad = nR - bad;
+                cCatTotals[0] += notBad;
+                cCatTotals[1] += bad;
+                cSumP += (bad * (bad - 1) + notBad * (notBad - 1));
+                cTotalN++;
+            }
+        });
+        const cPbar = cTotalN > 0 ? cSumP / (cTotalN * nR * (nR - 1)) : 0;
+        const cTotalRatings = cTotalN * nR;
+        const cPe = Math.pow(cCatTotals[0] / cTotalRatings, 2) + Math.pow(cCatTotals[1] / cTotalRatings, 2);
+        const cKappa = cPe < 1 ? (cPbar - cPe) / (1 - cPe) : 1;
+        return { campaign: camp, studies: sids.length, kappa: cKappa };
+    }).sort((a, b) => b.kappa - a.kappa);
+
     // Agreement distribution
     const bands = { 'Poor': 0, 'Fair': 0, 'Moderate': 0, 'Substantial': 0, 'Almost Perfect': 0 };
     studyMetrics.forEach(sm => { bands[getAgreementBand(sm.studyIoU).label]++; });
 
+    // Disagreement spotlight (5 lowest IoU studies that have at least one flag)
+    const disagreements = studyMetrics
+        .filter(sm => !sm.allBins.every(b => b.reduce((s,v)=>s+v,0) === 0))
+        .sort((a, b) => a.studyIoU - b.studyIoU)
+        .slice(0, 5);
+
     // Reviewer stats
     const avgFlagRate = reviewerStats.reduce((s, r) => s + (r.totalSec > 0 ? r.flaggedSec / r.totalSec : 0), 0) / reviewers.length;
+    const totalRegions = reviewerStats.reduce((s, r) => s + r.regionCount, 0);
 
     // Build HTML
     let html = '';
 
-    // --- Section 1: Summary Metrics ---
-    html += `<h3 style="margin-bottom:12px; font-size:16px;">Overall Agreement</h3>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:24px;">
-        <div style="padding:20px; background:#f9fafb; border-radius:10px; text-align:center; border-left:4px solid ${kappaBand.color};">
-            <div style="font-size:32px; font-weight:700; color:${kappaBand.color};">${kappa.toFixed(3)}</div>
-            <div style="font-size:13px; font-weight:600; color:${kappaBand.color}; margin:4px 0;">${kappaBand.label} Agreement</div>
-            <div style="font-size:11px; color:#6b7280;">Fleiss' Kappa — chance-corrected agreement across all reviewers</div>
+    // --- HERO VERDICT ---
+    html += `<div style="text-align:center; padding:28px 20px; background:linear-gradient(135deg, ${kappaBand.color}11, ${kappaBand.color}22); border:2px solid ${kappaBand.color}44; border-radius:12px; margin-bottom:24px;">
+        <div style="font-size:14px; font-weight:500; color:#6b7280; margin-bottom:4px;">Overall Reviewer Agreement</div>
+        <div style="font-size:40px; font-weight:800; color:${kappaBand.color}; margin-bottom:4px;">${kappaBand.label}</div>
+        <div style="font-size:24px; font-weight:600; color:#1a1a2e;">\u03BA = ${kappa.toFixed(3)}</div>
+        <div style="font-size:12px; color:#6b7280; margin-top:8px;">Fleiss' Kappa — chance-corrected agreement across ${reviewers.length} reviewers on ${studyIds.length} studies</div>
+    </div>`;
+
+    // --- KEY STATS ROW ---
+    html += `<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:24px;">
+        <div style="padding:14px; background:#f9fafb; border-radius:8px; text-align:center;">
+            <div style="font-size:22px; font-weight:700; color:#1a1a2e;">${reviewers.length}</div>
+            <div style="font-size:11px; color:#6b7280;">Reviewers</div>
         </div>
-        <div style="padding:20px; background:#f9fafb; border-radius:10px; text-align:center; border-left:4px solid ${iouBand.color};">
-            <div style="font-size:32px; font-weight:700; color:${iouBand.color};">${(overallIoU * 100).toFixed(1)}%</div>
-            <div style="font-size:13px; font-weight:600; color:${iouBand.color}; margin:4px 0;">${iouBand.label} Overlap</div>
-            <div style="font-size:11px; color:#6b7280;">IoU — intersection over union of all flagged regions</div>
+        <div style="padding:14px; background:#f9fafb; border-radius:8px; text-align:center;">
+            <div style="font-size:22px; font-weight:700; color:#1a1a2e;">${totalRegions}</div>
+            <div style="font-size:11px; color:#6b7280;">Total Flagged Regions</div>
+        </div>
+        <div style="padding:14px; background:#f9fafb; border-radius:8px; text-align:center;">
+            <div style="font-size:22px; font-weight:700; color:${iouBand.color};">${(overallIoU * 100).toFixed(1)}%</div>
+            <div style="font-size:11px; color:#6b7280;">Strict IoU</div>
+        </div>
+        <div style="padding:14px; background:#f9fafb; border-radius:8px; text-align:center;">
+            <div style="font-size:22px; font-weight:700; color:${getAgreementBand(tolerantIoU).color};">${(tolerantIoU * 100).toFixed(1)}%</div>
+            <div style="font-size:11px; color:#6b7280;">IoU (\u00b15s tolerance)</div>
         </div>
     </div>`;
 
-    // --- Section 2: Pairwise IoU ---
-    html += `<h3 style="margin-bottom:8px; font-size:14px;">Pairwise Agreement</h3>
-    <table style="width:100%; font-size:13px; border-collapse:collapse; margin-bottom:24px;">
-        <tr style="border-bottom:1px solid #e5e7eb;"><th style="text-align:left;padding:6px 0;">Pair</th><th style="text-align:right;padding:6px 0;">IoU</th><th style="text-align:right;padding:6px 0;">Level</th></tr>
-        ${pairResults.map(p => {
-            const band = getAgreementBand(p.iou);
-            return `<tr style="border-bottom:1px solid #f3f4f6;"><td style="padding:6px 0;">${p.a} vs ${p.b}</td><td style="text-align:right;padding:6px 0;">${(p.iou * 100).toFixed(1)}%</td><td style="text-align:right;padding:6px 0;color:${band.color};font-weight:500;">${band.label}</td></tr>`;
-        }).join('')}
-    </table>`;
-
-    // --- Section 3: Reviewer Stats ---
-    html += `<h3 style="margin-bottom:8px; font-size:14px;">Reviewer Comparison</h3>
-    <table style="width:100%; font-size:13px; border-collapse:collapse; margin-bottom:24px;">
-        <tr style="border-bottom:1px solid #e5e7eb;">
-            <th style="text-align:left;padding:6px 0;">Reviewer</th>
-            <th style="text-align:right;padding:6px 0;">Regions</th>
-            <th style="text-align:right;padding:6px 0;">Flagged Time</th>
-            <th style="text-align:right;padding:6px 0;">Flag Rate</th>
-            <th style="text-align:right;padding:6px 0;">Status</th>
-        </tr>
-        ${reviewers.map((r, i) => {
-            const rate = reviewerStats[i].totalSec > 0 ? reviewerStats[i].flaggedSec / reviewerStats[i].totalSec : 0;
-            const isOutlier = avgFlagRate > 0 && (rate > avgFlagRate * 2 || rate < avgFlagRate * 0.5);
-            return `<tr style="border-bottom:1px solid #f3f4f6;">
-                <td style="padding:6px 0;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${REVIEWER_COLORS[i % REVIEWER_COLORS.length]};margin-right:6px;"></span>${r}</td>
-                <td style="text-align:right;padding:6px 0;">${reviewerStats[i].regionCount}</td>
-                <td style="text-align:right;padding:6px 0;">${formatSeconds(reviewerStats[i].flaggedSec)}</td>
-                <td style="text-align:right;padding:6px 0;">${(rate * 100).toFixed(1)}%</td>
-                <td style="text-align:right;padding:6px 0;color:${isOutlier ? '#f97316' : '#22c55e'};font-weight:500;">${isOutlier ? 'Outlier' : 'Normal'}</td>
-            </tr>`;
-        }).join('')}
-    </table>`;
-
-    // --- Section 4: Agreement Distribution ---
-    const totalStudies = studyMetrics.length;
+    // --- AGREEMENT DISTRIBUTION ---
     const bandColors = { 'Poor': '#ef4444', 'Fair': '#f97316', 'Moderate': '#eab308', 'Substantial': '#22c55e', 'Almost Perfect': '#15803d' };
-    html += `<h3 style="margin-bottom:8px; font-size:14px;">Agreement Distribution</h3>
-    <div style="display:flex; gap:4px; height:28px; border-radius:6px; overflow:hidden; margin-bottom:6px;">
-        ${Object.entries(bands).map(([label, count]) => count > 0 ? `<div style="flex:${count};background:${bandColors[label]};"></div>` : '').join('')}
-    </div>
-    <div style="display:flex; gap:12px; flex-wrap:wrap; font-size:11px; color:#6b7280; margin-bottom:24px;">
-        ${Object.entries(bands).map(([label, count]) => count > 0 ? `<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${bandColors[label]};margin-right:4px;"></span>${label}: ${count} studies</span>` : '').join('')}
+    html += `<div style="margin-bottom:24px;">
+        <h3 style="margin-bottom:8px; font-size:14px;">Agreement Distribution</h3>
+        <div style="display:flex; gap:3px; height:24px; border-radius:6px; overflow:hidden; margin-bottom:6px;">
+            ${Object.entries(bands).map(([label, count]) => count > 0 ? `<div style="flex:${count};background:${bandColors[label]};"></div>` : '').join('')}
+        </div>
+        <div style="display:flex; gap:12px; flex-wrap:wrap; font-size:11px; color:#6b7280;">
+            ${Object.entries(bands).map(([label, count]) => count > 0 ? `<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${bandColors[label]};margin-right:4px;"></span>${label}: ${count}</span>` : '').join('')}
+        </div>
+    </div>`;
+
+    // --- PER-CAMPAIGN KAPPA ---
+    html += `<div style="margin-bottom:24px;">
+        <h3 style="margin-bottom:8px; font-size:14px;">Agreement by Campaign</h3>
+        <table style="width:100%; font-size:12px; border-collapse:collapse;">
+            <tr style="border-bottom:1px solid #e5e7eb; background:#f9fafb;">
+                <th style="text-align:left;padding:8px 6px;">Campaign</th>
+                <th style="text-align:right;padding:8px 6px;">Studies</th>
+                <th style="text-align:right;padding:8px 6px;">Kappa</th>
+                <th style="text-align:right;padding:8px 6px;">Level</th>
+            </tr>
+            ${campaignKappas.map(c => {
+                const band = getAgreementBand(c.kappa);
+                return `<tr style="border-bottom:1px solid #f3f4f6;">
+                    <td style="padding:8px 6px;">${c.campaign}</td>
+                    <td style="text-align:right;padding:8px 6px;">${c.studies}</td>
+                    <td style="text-align:right;padding:8px 6px;font-weight:600;">${c.kappa.toFixed(3)}</td>
+                    <td style="text-align:right;padding:8px 6px;color:${band.color};font-weight:500;">${band.label}</td>
+                </tr>`;
+            }).join('')}
+        </table>
+    </div>`;
+
+    // --- DISAGREEMENT SPOTLIGHT ---
+    if (disagreements.length > 0) {
+        html += `<div style="margin-bottom:24px;">
+            <h3 style="margin-bottom:8px; font-size:14px;">Disagreement Spotlight</h3>
+            <p style="font-size:11px; color:#6b7280; margin-bottom:10px;">Studies with the lowest agreement — where reviewers diverged most.</p>
+            <div style="display:grid; gap:10px;">
+                ${disagreements.map(sm => {
+                    const band = getAgreementBand(sm.studyIoU);
+                    const flaggedReviewers = reviewers.filter((r, ri) => sm.allBins[ri].reduce((s,v)=>s+v,0) > 0);
+                    return `<div style="padding:12px 14px; background:#fef2f2; border:1px solid #fecaca; border-radius:8px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-weight:600; font-size:13px;">${sm.sid}</span>
+                            <span style="font-size:12px; color:${band.color}; font-weight:500;">IoU: ${(sm.studyIoU * 100).toFixed(1)}%</span>
+                        </div>
+                        <div style="font-size:11px; color:#6b7280; margin-top:4px;">${sm.campaign} · ${formatSeconds(sm.duration)} · Flagged by ${flaggedReviewers.length} reviewer${flaggedReviewers.length > 1 ? 's' : ''}</div>
+                        <div style="font-size:11px; color:#374151; margin-top:4px;">Regions: ${sm.regionsPerReviewer.map((c, i) => `${reviewers[i].replace('Reviewer ', 'R')}: ${c}`).join(', ')}</div>
+                    </div>`;
+                }).join('')}
+            </div>
+        </div>`;
+    }
+
+    // --- PAIRWISE AGREEMENT ---
+    html += `<div style="margin-bottom:24px;">
+        <h3 style="margin-bottom:8px; font-size:14px;">Pairwise Agreement</h3>
+        <table style="width:100%; font-size:13px; border-collapse:collapse;">
+            <tr style="border-bottom:1px solid #e5e7eb;"><th style="text-align:left;padding:6px 0;">Pair</th><th style="text-align:right;padding:6px 0;">IoU</th><th style="text-align:right;padding:6px 0;">Level</th></tr>
+            ${pairResults.map(p => {
+                const band = getAgreementBand(p.iou);
+                return `<tr style="border-bottom:1px solid #f3f4f6;"><td style="padding:6px 0;">${p.a} vs ${p.b}</td><td style="text-align:right;padding:6px 0;">${(p.iou * 100).toFixed(1)}%</td><td style="text-align:right;padding:6px 0;color:${band.color};font-weight:500;">${band.label}</td></tr>`;
+            }).join('')}
+        </table>
+    </div>`;
+
+    // --- REVIEWER COMPARISON ---
+    html += `<div style="margin-bottom:24px;">
+        <h3 style="margin-bottom:8px; font-size:14px;">Reviewer Comparison</h3>
+        <table style="width:100%; font-size:13px; border-collapse:collapse;">
+            <tr style="border-bottom:1px solid #e5e7eb;">
+                <th style="text-align:left;padding:6px 0;">Reviewer</th>
+                <th style="text-align:right;padding:6px 0;">Regions</th>
+                <th style="text-align:right;padding:6px 0;">Flagged Time</th>
+                <th style="text-align:right;padding:6px 0;">Flag Rate</th>
+                <th style="text-align:right;padding:6px 0;">Status</th>
+            </tr>
+            ${reviewers.map((r, i) => {
+                const rate = reviewerStats[i].totalSec > 0 ? reviewerStats[i].flaggedSec / reviewerStats[i].totalSec : 0;
+                const isOutlier = avgFlagRate > 0 && (rate > avgFlagRate * 2 || rate < avgFlagRate * 0.5);
+                return `<tr style="border-bottom:1px solid #f3f4f6;">
+                    <td style="padding:6px 0;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${REVIEWER_COLORS[i % REVIEWER_COLORS.length]};margin-right:6px;"></span>${r}</td>
+                    <td style="text-align:right;padding:6px 0;">${reviewerStats[i].regionCount}</td>
+                    <td style="text-align:right;padding:6px 0;">${formatSeconds(reviewerStats[i].flaggedSec)}</td>
+                    <td style="text-align:right;padding:6px 0;">${(rate * 100).toFixed(1)}%</td>
+                    <td style="text-align:right;padding:6px 0;color:${isOutlier ? '#f97316' : '#22c55e'};font-weight:500;">${isOutlier ? 'Outlier' : 'Normal'}</td>
+                </tr>`;
+            }).join('')}
+        </table>
     </div>`;
 
     // --- Section 5: Reasons Analysis ---
