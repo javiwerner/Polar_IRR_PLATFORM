@@ -1289,7 +1289,7 @@ function toggleStudyDetail(idx) {
                 const x0 = Math.max(0, (new Date(t.start).getTime() - startMs) / 60000);
                 const x1 = Math.min(endMin, (new Date(t.end).getTime() - startMs) / 60000);
                 miniShapes.push({ type: 'rect', xref: 'x', yref: 'paper', x0, x1, y0: 0, y1: 1,
-                    fillcolor: DISTINCT_COLORS_CHART[ri % DISTINCT_COLORS_CHART.length], opacity: 0.25, line: { width: 1, color: DISTINCT_COLORS_CHART[ri % DISTINCT_COLORS_CHART.length] } });
+                    fillcolor: DISTINCT_COLORS_CHART[ri % DISTINCT_COLORS_CHART.length], opacity: 0.12, line: { width: 2, color: DISTINCT_COLORS_CHART[ri % DISTINCT_COLORS_CHART.length] } });
             });
         });
         Plotly.newPlot(chartId, miniTraces, {
