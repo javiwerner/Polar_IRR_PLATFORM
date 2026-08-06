@@ -1297,7 +1297,7 @@ function toggleStudyDetail(idx) {
             height: 200, margin: { l: 40, r: 10, t: 10, b: 30 },
             xaxis: { title: '', range: [0, endMin], fixedrange: true },
             yaxis: { title: 'BPM', fixedrange: true },
-            legend: { orientation: 'h', y: 1.15, font: { size: 10 } },
+            showlegend: false,
             shapes: miniShapes, hovermode: false
         }, { responsive: true, displayModeBar: false, staticPlot: true }).then(() => {
             const chartEl = document.getElementById(chartId);
