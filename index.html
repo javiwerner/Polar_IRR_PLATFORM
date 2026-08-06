@@ -319,6 +319,7 @@ function initApp() {
     if (Object.keys(STUDIES).length > 0) {
         loadStudy(Object.keys(STUDIES)[0]);
     }
+    if (Object.keys(irrData).length >= 2) renderDashboard();
 }
 
 // ============================================================
@@ -330,7 +331,7 @@ function showTab(tab) {
     document.getElementById('tab-' + tab).style.display = 'block';
     const tabEl = document.querySelector(`.tab[data-tab="${tab}"]`);
     if (tabEl) tabEl.classList.add('active');
-    if (tab === 'dashboard') renderDashboard();
+    if (tab === 'dashboard' && Object.keys(STUDIES).length > 0) renderDashboard();
     if (tab === 'export') renderExportProgress();
 }
 
