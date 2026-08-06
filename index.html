@@ -1204,12 +1204,12 @@ function toggleStudyDetail(idx) {
                 if (inRegion) {
                     const left = (regionStart / duration) * 100;
                     const width = ((i - regionStart) / duration) * 100;
-                    agreementRegions += `<div style="position:absolute;left:${left}%;width:${width}%;height:100%;background:#16a34a;border-radius:2px;" title="Full agreement: ${formatSeconds(regionStart)} — ${formatSeconds(i)}"></div>`;
+                    agreementRegions += `<div style="position:absolute;left:${left}%;width:${width}%;height:100%;background:#16a34a;opacity:0.55;border-radius:5px;" title="Full agreement: ${formatSeconds(regionStart)} — ${formatSeconds(i)}"></div>`;
                     inRegion = false;
                 }
             }
         }
-        agreementBar += `<div style="position:relative;height:20px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;overflow:hidden;">${agreementRegions || '<span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:9px;color:#9ca3af;">No full agreement regions</span>'}</div>`;
+        agreementBar += `<div style="position:relative;height:10px;background:#f3f4f6;border-radius:5px;overflow:hidden;">${agreementRegions || '<span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:9px;color:#9ca3af;">No full agreement regions</span>'}</div>`;
 
         // Per-reviewer bars — will go BELOW chart
         const DISTINCT_COLORS = ['#2563eb', '#dc2626', '#d97706', '#7c3aed', '#db2777', '#0891b2', '#4f46e5'];
