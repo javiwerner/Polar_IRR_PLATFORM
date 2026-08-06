@@ -1193,13 +1193,12 @@ function toggleStudyDetail(idx) {
 
         const nReviewers = reviewers.length;
 
-        // Agreement bar — green where ALL reviewers agree (all flagged OR none flagged)
-        let agreementBar = '<div style="margin-bottom:4px;"><strong style="font-size:11px; color:#16a34a;">Agreement</strong> <span style="font-size:10px; color:#6b7280;">— regions where all reviewers agree</span></div>';
+        // Agreement bar — green where ALL reviewers flagged, grey = no flags (clean)
+        let agreementBar = '<div style="margin-bottom:4px;"><strong style="font-size:11px; color:#16a34a;">Agreement</strong> <span style="font-size:10px; color:#6b7280;">— green = all agree bad signal</span></div>';
         let agreementRegions = '';
         let inRegion = false, regionStart = 0;
         for (let i = 0; i <= duration; i++) {
-            const allAgree = i < duration && (secCoverage[i] === nReviewers || secCoverage[i] === 0);
-            if (allAgree) {
+            if (i < duration && secCoverage[i] === nReviewers && secCoverage[i] > 0) {
                 if (!inRegion) { inRegion = true; regionStart = i; }
             } else {
                 if (inRegion) {
