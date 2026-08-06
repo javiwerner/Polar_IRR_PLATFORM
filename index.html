@@ -1179,22 +1179,60 @@ function toggleStudyDetail(idx) {
         const cell = row.querySelector('td');
         const duration = sm.duration;
 
-        // Timeline bars (will go under chart)
-        let timeline = '';
+        // Timeline — unified agreement view
+        // Build per-second coverage to find agreement vs individual regions
+        const secCoverage = new Array(duration).fill(0); // count of reviewers flagging each second
+        const secByReviewer = reviewers.map(() => new Array(duration).fill(0));
+        reviewers.forEach((r, ri) => {
+            (irrData[r][sm.sid] || []).forEach(t => {
+                const tS = Math.max(0, Math.floor((new Date(t.start).getTime() - sm.startMs) / 1000));
+                const tE = Math.min(duration, Math.ceil((new Date(t.end).getTime() - sm.startMs) / 1000));
+                for (let i = tS; i < tE; i++) { secCoverage[i]++; secByReviewer[ri][i] = 1; }
+            });
+        });
+
+        // Render: one unified bar showing agreement in green, individual colors for solo flags
+        const nReviewers = reviewers.length;
+        let timeline = '<div style="margin-bottom:2px;"><strong style="font-size:11px; color:#374151;">Agreement Map</strong> <span style="font-size:10px; color:#6b7280;">— green = all agree, colors = individual reviewer flags</span></div>';
+
+        // Agreement bar (where ALL reviewers flagged)
+        let agreementRegions = '';
+        let inRegion = false, regionStart = 0;
+        for (let i = 0; i <= duration; i++) {
+            if (i < duration && secCoverage[i] === nReviewers) {
+                if (!inRegion) { inRegion = true; regionStart = i; }
+            } else {
+                if (inRegion) {
+                    const left = (regionStart / duration) * 100;
+                    const width = ((i - regionStart) / duration) * 100;
+                    agreementRegions += `<div style="position:absolute;left:${left}%;width:${width}%;height:100%;background:#22c55e;opacity:0.8;border-radius:2px;" title="Full agreement: ${formatSeconds(regionStart)} — ${formatSeconds(i)}"></div>`;
+                    inRegion = false;
+                }
+            }
+        }
+        if (agreementRegions) {
+            timeline += `<div style="display:flex;align-items:center;margin-bottom:3px;">
+                <div style="position:relative;flex:1;height:16px;background:#e5e7eb;border-radius:3px;overflow:hidden;">${agreementRegions}</div>
+                <span style="font-size:9px;width:32px;flex-shrink:0;color:#22c55e;text-align:left;margin-left:4px;font-weight:600;">All</span>
+            </div>`;
+        }
+
+        // Per-reviewer bars with more distinct colors
+        const DISTINCT_COLORS = ['#2563eb', '#dc2626', '#059669', '#d97706', '#7c3aed', '#db2777', '#0891b2'];
         reviewers.forEach((r, ri) => {
             const trims = irrData[r][sm.sid] || [];
-            const color = REVIEWER_COLORS[ri % REVIEWER_COLORS.length];
-            timeline += `<div style="display:flex;align-items:center;margin-bottom:3px;">
-                <div style="position:relative;flex:1;height:14px;background:#e5e7eb;border-radius:3px;overflow:hidden;">
+            const color = DISTINCT_COLORS[ri % DISTINCT_COLORS.length];
+            timeline += `<div style="display:flex;align-items:center;margin-bottom:2px;">
+                <div style="position:relative;flex:1;height:12px;background:#f3f4f6;border-radius:3px;overflow:hidden;">
                     ${trims.map(t => {
                         const tStart = Math.max(0, (new Date(t.start).getTime() - sm.startMs) / 1000);
                         const tEnd = Math.min(duration, (new Date(t.end).getTime() - sm.startMs) / 1000);
                         const left = (tStart / duration) * 100;
                         const width = ((tEnd - tStart) / duration) * 100;
-                        return `<div style="position:absolute;left:${left}%;width:${width}%;height:100%;background:${color};opacity:0.7;border-radius:2px;" title="${r}: ${formatSeconds(Math.round(tStart))} — ${formatSeconds(Math.round(tEnd))}${(t.note || t.reason) ? ': ' + (t.note || t.reason) : ''}"></div>`;
+                        return `<div style="position:absolute;left:${left}%;width:${width}%;height:100%;background:${color};opacity:0.75;border-radius:2px;" title="${r}: ${formatSeconds(Math.round(tStart))} — ${formatSeconds(Math.round(tEnd))}${(t.note || t.reason) ? ': ' + (t.note || t.reason) : ''}"></div>`;
                     }).join('')}
                 </div>
-                <span style="font-size:10px;width:24px;flex-shrink:0;color:${color};text-align:left;margin-left:4px;font-weight:600;">${r.replace('Reviewer ', 'R')}</span>
+                <span style="font-size:9px;width:32px;flex-shrink:0;color:${color};text-align:left;margin-left:4px;font-weight:600;">${r.replace('Reviewer ', 'R')}</span>
             </div>`;
         });
 
@@ -1250,12 +1288,13 @@ function toggleStudyDetail(idx) {
         }
         // Flagged region shapes per reviewer
         const miniShapes = [];
+        const DISTINCT_COLORS_CHART = ['#2563eb', '#dc2626', '#059669', '#d97706', '#7c3aed', '#db2777', '#0891b2'];
         reviewers.forEach((r, ri) => {
             (irrData[r][sm.sid] || []).forEach(t => {
                 const x0 = Math.max(0, (new Date(t.start).getTime() - startMs) / 60000);
                 const x1 = Math.min(endMin, (new Date(t.end).getTime() - startMs) / 60000);
                 miniShapes.push({ type: 'rect', xref: 'x', yref: 'paper', x0, x1, y0: 0, y1: 1,
-                    fillcolor: REVIEWER_COLORS[ri % REVIEWER_COLORS.length], opacity: 0.15, line: { width: 0 } });
+                    fillcolor: DISTINCT_COLORS_CHART[ri % DISTINCT_COLORS_CHART.length], opacity: 0.15, line: { width: 0 } });
             });
         });
         Plotly.newPlot(chartId, miniTraces, {
