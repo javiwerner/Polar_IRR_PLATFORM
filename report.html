@@ -661,6 +661,129 @@ function computeReport() {
             })()}
         </div>
 
+        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px; margin-bottom:16px;">
+            <h3 style="color:#1f2937; margin-bottom:10px;">Threshold Agreement Analysis</h3>
+            <p style="font-size:13px; color:#374151; line-height:1.7; margin-bottom:12px;">
+                Since boundary precision is not the source of disagreement, this analysis isolates the core question: <strong>do reviewers agree on <em>whether</em> a signal event should be trimmed?</strong> All reviewer trims are merged into distinct signal events (15s gap tolerance), then each event is classified by how many reviewers flagged any part of it.
+            </p>
+            ${(() => {
+                // Identify events by merging all trims with 15s gap tolerance
+                const GAP_TOL = 15;
+                const allEvents = [];
+                studyIds.forEach(sid => {
+                    const study = STUDIES[sid];
+                    const startMs = new Date(study.polar.ts[0]).getTime();
+                    const dur = Math.ceil((new Date(study.polar.ts[study.polar.ts.length-1]).getTime() - startMs) / 1000);
+                    const intervals = [];
+                    reviewers.forEach(r => {
+                        (irrData[r][sid] || []).forEach(t => {
+                            const s = Math.max(0, (new Date(t.start).getTime() - startMs) / 1000);
+                            const e = Math.min(dur, (new Date(t.end).getTime() - startMs) / 1000);
+                            if (e > s) intervals.push([s, e]);
+                        });
+                    });
+                    if (intervals.length === 0) return;
+                    intervals.sort((a, b) => a[0] - b[0]);
+                    const merged = [[intervals[0][0], intervals[0][1]]];
+                    for (let i = 1; i < intervals.length; i++) {
+                        if (intervals[i][0] <= merged[merged.length-1][1] + GAP_TOL) {
+                            merged[merged.length-1][1] = Math.max(merged[merged.length-1][1], intervals[i][1]);
+                        } else {
+                            merged.push([intervals[i][0], intervals[i][1]]);
+                        }
+                    }
+                    merged.forEach(([es, ee]) => {
+                        const flags = reviewers.map(r => {
+                            return (irrData[r][sid] || []).some(t => {
+                                const ts = Math.max(0, (new Date(t.start).getTime() - startMs) / 1000);
+                                const te = Math.min(dur, (new Date(t.end).getTime() - startMs) / 1000);
+                                return ts < ee && te > es;
+                            });
+                        });
+                        allEvents.push({ sid, start: es, end: ee, duration: ee - es, nFlagged: flags.filter(Boolean).length, flags });
+                    });
+                });
+
+                const clearYes = allEvents.filter(e => e.nFlagged >= 5);
+                const grayZone = allEvents.filter(e => e.nFlagged >= 2 && e.nFlagged <= 4);
+                const solo = allEvents.filter(e => e.nFlagged === 1);
+                const totalEvt = allEvents.length;
+                const totalTime = allEvents.reduce((s, e) => s + e.duration, 0);
+
+                // Pairwise threshold agreement
+                let totalPairs = 0, agreeingPairs = 0;
+                allEvents.forEach(e => {
+                    for (let a = 0; a < reviewers.length; a++) {
+                        for (let b = a+1; b < reviewers.length; b++) {
+                            totalPairs++;
+                            if (e.flags[a] === e.flags[b]) agreeingPairs++;
+                        }
+                    }
+                });
+                const pairwiseAgreement = (agreeingPairs / totalPairs * 100).toFixed(1);
+
+                // Per-reviewer minority rate
+                const reviewerMinority = reviewers.map((r, ri) => {
+                    const flagged = allEvents.filter(e => e.flags[ri]);
+                    const inMinority = flagged.filter(e => e.nFlagged <= 2);
+                    return { name: r, total: flagged.length, minority: inMinority.length, rate: flagged.length > 0 ? (inMinority.length / flagged.length * 100).toFixed(0) : '0' };
+                });
+
+                // Gray zone event list (top by duration)
+                const topGray = grayZone.sort((a, b) => b.duration - a.duration).slice(0, 10);
+
+                return `
+                <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-bottom:16px;">
+                    <div style="text-align:center; padding:14px; background:#ecfdf5; border-radius:8px;">
+                        <div style="font-size:20px; font-weight:800; color:#15803d;">${clearYes.length}</div>
+                        <div style="font-size:11px; color:#15803d; font-weight:600;">Clear YES</div>
+                        <div style="font-size:10px; color:#6b7280;">(5+ of 7 flag)</div>
+                        <div style="font-size:10px; color:#6b7280;">${(clearYes.reduce((s,e)=>s+e.duration,0)/60).toFixed(0)} min</div>
+                    </div>
+                    <div style="text-align:center; padding:14px; background:#fefce8; border-radius:8px;">
+                        <div style="font-size:20px; font-weight:800; color:#ca8a04;">${grayZone.length}</div>
+                        <div style="font-size:11px; color:#ca8a04; font-weight:600;">Gray Zone</div>
+                        <div style="font-size:10px; color:#6b7280;">(2-4 of 7 flag)</div>
+                        <div style="font-size:10px; color:#6b7280;">${(grayZone.reduce((s,e)=>s+e.duration,0)/60).toFixed(0)} min</div>
+                    </div>
+                    <div style="text-align:center; padding:14px; background:#fef2f2; border-radius:8px;">
+                        <div style="font-size:20px; font-weight:800; color:#dc2626;">${solo.length}</div>
+                        <div style="font-size:11px; color:#dc2626; font-weight:600;">Solo</div>
+                        <div style="font-size:10px; color:#6b7280;">(1 of 7 flags)</div>
+                        <div style="font-size:10px; color:#6b7280;">${(solo.reduce((s,e)=>s+e.duration,0)/60).toFixed(0)} min</div>
+                    </div>
+                </div>
+                <div style="font-size:13px; line-height:1.8; margin-bottom:16px;">
+                    <strong>Pairwise Threshold Agreement: ${pairwiseAgreement}%</strong> — when any two reviewers look at the same signal event, they agree on whether it needs trimming ${pairwiseAgreement}% of the time.
+                </div>
+                <ul style="font-size:13px; line-height:1.8; padding-left:20px; color:#374151; margin-bottom:16px;">
+                    <li><strong>${totalEvt} distinct signal events</strong> identified across ${studyIds.length} studies (15s merge tolerance).</li>
+                    <li><strong>${(clearYes.length/totalEvt*100).toFixed(0)}% of events</strong> have clear consensus (5+ reviewers) — these are unambiguous trims.</li>
+                    <li><strong>${(grayZone.length/totalEvt*100).toFixed(0)}% of events are in the gray zone</strong> (2-4 reviewers flag) — these are the calibration targets where reviewers disagree on whether the artifact severity warrants trimming.</li>
+                    <li><strong>${(solo.length/totalEvt*100).toFixed(0)}% are solo flags</strong> — one reviewer's threshold differs from the group on these regions.</li>
+                </ul>
+                <details style="margin-bottom:12px;">
+                    <summary style="cursor:pointer; font-size:12px; font-weight:600; color:#374151;">Per-Reviewer Minority Flag Rate</summary>
+                    <table style="width:100%; font-size:12px; margin-top:8px; border-collapse:collapse;">
+                        <tr style="border-bottom:1px solid #e5e7eb;"><th style="text-align:left;padding:4px;">Reviewer</th><th style="text-align:right;padding:4px;">Events Flagged</th><th style="text-align:right;padding:4px;">In Minority (≤2)</th><th style="text-align:right;padding:4px;">Minority Rate</th></tr>
+                        ${reviewerMinority.map(rm => `<tr style="border-bottom:1px solid #f3f4f6;"><td style="padding:4px;">${rm.name}</td><td style="text-align:right;padding:4px;">${rm.total}</td><td style="text-align:right;padding:4px;">${rm.minority}</td><td style="text-align:right;padding:4px;">${rm.rate}%</td></tr>`).join('')}
+                    </table>
+                </details>
+                <details>
+                    <summary style="cursor:pointer; font-size:12px; font-weight:600; color:#374151;">Top Gray Zone Events (calibration targets)</summary>
+                    <table style="width:100%; font-size:11px; margin-top:8px; border-collapse:collapse;">
+                        <tr style="border-bottom:1px solid #e5e7eb;"><th style="text-align:left;padding:4px;">Study</th><th style="text-align:right;padding:4px;">Time</th><th style="text-align:right;padding:4px;">Duration</th><th style="text-align:left;padding:4px 4px 4px 12px;">Flagged By</th><th style="text-align:left;padding:4px;">Not Flagged By</th></tr>
+                        ${topGray.map(e => {
+                            const yes = reviewers.filter((r,i) => e.flags[i]).map(r => r.replace('Reviewer ','R')).join(', ');
+                            const no = reviewers.filter((r,i) => !e.flags[i]).map(r => r.replace('Reviewer ','R')).join(', ');
+                            const fmtT = (s) => Math.floor(s/60) + ':' + String(Math.floor(s%60)).padStart(2,'0');
+                            return `<tr style="border-bottom:1px solid #f3f4f6;"><td style="padding:4px;">${e.sid}</td><td style="text-align:right;padding:4px;">${fmtT(e.start)}-${fmtT(e.end)}</td><td style="text-align:right;padding:4px;">${Math.round(e.duration)}s</td><td style="padding:4px 4px 4px 12px;color:#ca8a04;">${yes}</td><td style="padding:4px;color:#6b7280;">${no}</td></tr>`;
+                        }).join('')}
+                    </table>
+                </details>`;
+            })()}
+        </div>
+
         <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px;">
             <h3 style="color:#1f2937; margin-bottom:10px;">Recommendations</h3>
             <ul style="font-size:13px; line-height:1.8; padding-left:20px; color:#374151;">
