@@ -764,6 +764,7 @@ function computeReport() {
                 
                 return `<ul style="font-size:13px; line-height:1.8; padding-left:20px; color:#374151;">
                     <li><strong>Why tolerance barely helps:</strong> The median trim duration is <strong>${Math.round(median)}s</strong> (~${(median/60).toFixed(1)} min). When flagged regions are this long, a ±5s boundary expansion adds negligible area to the union.</li>
+                    <li><strong>Example:</strong> If two reviewers both flag a 200-second region but disagree on the start by 3 seconds, strict IoU is already ~197/203 = 97%. The ±5s tolerance only matters when trims are short (close to 10s).</li>
                     <li><strong>Trim duration distribution:</strong> P25 = ${Math.round(p25)}s, Median = ${Math.round(median)}s, P75 = ${Math.round(p75)}s. Only ${shortTrims} of ${n} trims (${(shortTrims/n*100).toFixed(1)}%) are under 10s where tolerance would meaningfully help.</li>
                     <li><strong>${longTrims} of ${n} trims (${(longTrims/n*100).toFixed(1)}%)</strong> are over 2 minutes — these are large contiguous bad-signal regions where boundary precision is irrelevant.</li>
                     <li><strong>${gainsUnder1} of ${studyIds.length} studies</strong> gained less than 1 percentage point from the tolerance window.</li>
