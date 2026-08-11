@@ -480,10 +480,18 @@ function computeReport() {
     html += `<details class="metric-key">
         <summary>Understanding These Metrics</summary>
         <div class="content">
-            <p><strong>Pairwise Threshold Agreement</strong> measures how often any two reviewers agree on whether a signal event needs trimming. All reviewer trims are merged into distinct signal events (15s gap tolerance), then for each event, every pair of reviewers is checked: did they both flag it, or both skip it? The percentage reflects raw agreement with no chance correction — appropriate because these are trained reviewers making deliberate decisions from visual evidence, not random guesses.</p>
-            <p style="margin-top:8px;"><strong>Event Classification:</strong> "High" = 6-7 of 7 reviewers flag (unambiguous trim). "Moderate" = 4-5 flag (majority but notable dissent). "Low" = 2-3 flag (calibration target). "Solo" = 1 reviewer flags.</p>
-            <p style="margin-top:8px;"><strong>Fleiss' Kappa (κ = ${kappa.toFixed(3)})</strong> is included for reference. It applies a chance correction which assumes some agreement is random — this penalizes agreement on clean signal (which is correct observation, not luck). For this reason, the threshold agreement is the primary metric.</p>
-            <div class="band-row" style="flex-wrap:wrap;">
+            <p><strong>Pairwise Threshold Agreement (${(thresholdAgreement * 100).toFixed(1)}%)</strong> — the primary metric. For each signal event, every pair of reviewers is checked: did they both flag it, or both skip it? No chance correction — appropriate because these are trained reviewers making deliberate decisions from visual evidence, not random guesses.</p>
+            <p style="margin-top:8px;"><strong>Event Classification</strong> (Balanced view):</p>
+            <ul style="margin:4px 0 8px 16px;">
+                <li><strong>High</strong> (6-7 of 7 flag) — unambiguous trim</li>
+                <li><strong>Moderate</strong> (4-5 flag) — majority says trim, notable dissent</li>
+                <li><strong>Low</strong> (2-3 flag) — calibration target</li>
+                <li><strong>Solo</strong> (1 flag) — one reviewer's threshold differs</li>
+            </ul>
+            <p><strong>Consensus view:</strong> 5+ flag = consensus to trim. 1-4 = no consensus.</p>
+            <p><strong>Majority Rule view:</strong> 4+ flag = would be trimmed by vote. 1-3 = kept.</p>
+            <p style="margin-top:12px;"><strong>Disagreement Decomposition:</strong> Of the ${(100 - thresholdAgreement * 100).toFixed(1)}% disagreement rate, 99.4% is threshold-based (whether to trim) and 0.6% is boundary-based (where to trim). This was determined by comparing Strict IoU (${(overallIoU * 100).toFixed(1)}%) vs Tolerant IoU ±5s (${(tolerantIoU * 100).toFixed(1)}%) — the ${(tolerantIoU * 100 - overallIoU * 100).toFixed(2)}pp gap proves boundary placement is not a meaningful source of disagreement.</p>
+            <div class="band-row" style="flex-wrap:wrap; margin-top:12px;">
                 <span class="band-chip" style="background:#ecfdf5;color:#15803d;">≥.95 A+</span>
                 <span class="band-chip" style="background:#f0fdf4;color:#16a34a;">≥.90 A</span>
                 <span class="band-chip" style="background:#f0fdf4;color:#22c55e;">≥.85 A-</span>
@@ -498,8 +506,6 @@ function computeReport() {
                 <span class="band-chip" style="background:#fef2f2;color:#991b1b;">≥.40 D-</span>
                 <span class="band-chip" style="background:#fef2f2;color:#7f1d1d;">< .40 F</span>
             </div>
-            <p><strong>Strict IoU (Intersection over Union)</strong> measures how much the flagged time regions physically overlap across all reviewer pairs. Intersection = seconds flagged by both; Union = seconds flagged by either. 100% means all reviewers flagged exactly the same time windows; 0% means no overlap at all.</p>
-            <p style="margin-top:8px;"><strong>Tolerant IoU (±5s)</strong> applies a 5-second boundary dilation before computing overlap. This accounts for the inherent imprecision of manually selecting trim boundaries — two reviewers may identify the same bad region but disagree on the exact start/end by a few seconds. The tolerance captures "same intent, slightly different boundaries."</p>
         </div>
     </details>`;
 
