@@ -673,7 +673,17 @@ function nextStudy() {
 // DASHBOARD
 // ============================================================
 let irrData = JSON.parse(localStorage.getItem('irr_dashboard_data') || '{}');
-function saveIRRData() { localStorage.setItem('irr_dashboard_data', JSON.stringify(irrData)); }
+console.log('[IRR] Loaded', Object.keys(irrData).length, 'reviewers from localStorage');
+function saveIRRData() {
+    try {
+        const json = JSON.stringify(irrData);
+        console.log('[IRR] Saving', Object.keys(irrData).length, 'reviewers,', (json.length / 1024).toFixed(1), 'KB');
+        localStorage.setItem('irr_dashboard_data', json);
+    } catch(e) {
+        console.error('[IRR] Save failed:', e);
+        alert('Warning: Could not save dashboard data — localStorage may be full (' + (JSON.stringify(irrData).length / 1024).toFixed(0) + ' KB). Data will be lost on reload.');
+    }
+}
 
 function renderDashboard() {
     const count = Object.keys(irrData).length;
