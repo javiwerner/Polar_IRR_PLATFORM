@@ -680,36 +680,36 @@ function computeReport() {
             </ul>
         </div>
 
-        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px; margin-bottom:16px;">
-            <h3 style="color:#1f2937; margin-bottom:10px;">Reviewer Behavior Analysis</h3>
-            <ul style="font-size:13px; line-height:1.8; padding-left:20px; color:#374151;">
+        <details style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px; margin-bottom:16px;">
+            <summary style="cursor:pointer; font-weight:700; color:#1f2937;">Reviewer Behavior Analysis</summary>
+            <ul style="font-size:13px; line-height:1.8; padding-left:20px; color:#374151; margin-top:10px;">
                 <li><strong>Most conservative:</strong> ${reviewers[leastFlagging]} (${reviewerStats[leastFlagging].regionCount} regions, ${(reviewerStats[leastFlagging].flaggedSec / reviewerStats[leastFlagging].totalSec * 100).toFixed(1)}% flag rate)</li>
                 <li><strong>Most aggressive:</strong> ${reviewers[mostFlagging]} (${reviewerStats[mostFlagging].regionCount} regions, ${(reviewerStats[mostFlagging].flaggedSec / reviewerStats[mostFlagging].totalSec * 100).toFixed(1)}% flag rate)</li>
                 <li><strong>Best-aligned pair:</strong> ${bestPair.a} & ${bestPair.b} (${(bestPair.iou * 100).toFixed(1)}% IoU)</li>
                 <li><strong>Most-divergent pair:</strong> ${worstPair.a} & ${worstPair.b} (${(worstPair.iou * 100).toFixed(1)}% IoU)</li>
                 <li>Flag rate range: ${(Math.min(...reviewerStats.map(r => r.flaggedSec / r.totalSec)) * 100).toFixed(1)}% – ${(Math.max(...reviewerStats.map(r => r.flaggedSec / r.totalSec)) * 100).toFixed(1)}% (${(Math.max(...reviewerStats.map(r => r.flaggedSec / r.totalSec)) / Math.min(...reviewerStats.map(r => r.flaggedSec / r.totalSec))).toFixed(1)}x spread)</li>
             </ul>
-        </div>
+        </details>
 
-        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px; margin-bottom:16px;">
-            <h3 style="color:#1f2937; margin-bottom:10px;">Campaign-Level Insights</h3>
-            <ul style="font-size:13px; line-height:1.8; padding-left:20px; color:#374151;">
+        <details style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px; margin-bottom:16px;">
+            <summary style="cursor:pointer; font-weight:700; color:#1f2937;">Campaign-Level Insights</summary>
+            <ul style="font-size:13px; line-height:1.8; padding-left:20px; color:#374151; margin-top:10px;">
                 <li><strong>Highest agreement:</strong> ${bestCampaign.campaign} (κ = ${bestCampaign.kappa.toFixed(3)}, ${bestCampaign.studies} studies)</li>
                 <li><strong>Lowest agreement:</strong> ${worstCampaign.campaign} (κ = ${worstCampaign.kappa.toFixed(3)}, ${worstCampaign.studies} studies)</li>
                 ${campaignKappas.map(c => `<li>${c.campaign}: κ = ${c.kappa.toFixed(3)} (${getAgreementBand(c.kappa).label}) — ${c.studies} studies</li>`).join('')}
             </ul>
-        </div>
+        </details>
 
-        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px; margin-bottom:16px;">
-            <h3 style="color:#1f2937; margin-bottom:10px;">Signal Quality Assessment</h3>
-            <ul style="font-size:13px; line-height:1.8; padding-left:20px; color:#374151;">
+        <details style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px; margin-bottom:16px;">
+            <summary style="cursor:pointer; font-weight:700; color:#1f2937;">Signal Quality Assessment</summary>
+            <ul style="font-size:13px; line-height:1.8; padding-left:20px; color:#374151; margin-top:10px;">
                 <li><strong>Total flagged time across all reviewers:</strong> ${formatSeconds(reviewerStats.reduce((s, r) => s + r.flaggedSec, 0))} (${totalRegions} discrete regions)</li>
                 <li><strong>Average per-study flagging:</strong> ${(studyMetrics.reduce((s, sm) => s + sm.flaggedPct, 0) / studyMetrics.length).toFixed(1)}% of study duration</li>
                 <li><strong>Most flagged study:</strong> ${studyMetrics.sort((a,b) => b.flaggedPct - a.flaggedPct)[0].sid} (${studyMetrics.sort((a,b) => b.flaggedPct - a.flaggedPct)[0].flaggedPct.toFixed(1)}% flagged)</li>
                 <li><strong>Studies where all reviewers flagged something:</strong> ${studyMetrics.filter(sm => sm.allBins.every(b => b.reduce((s,v)=>s+v,0) > 0)).length} of ${studyIds.length}</li>
                 <li><strong>Studies with no flags from any reviewer:</strong> ${studyMetrics.filter(sm => sm.allBins.every(b => b.reduce((s,v)=>s+v,0) === 0)).length} of ${studyIds.length}</li>
             </ul>
-        </div>
+        </details>
 
         <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px; margin-bottom:16px;">
             <h3 style="color:#1f2937; margin-bottom:10px;">Boundary Precision Analysis</h3>
