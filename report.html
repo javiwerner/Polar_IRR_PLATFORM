@@ -337,17 +337,25 @@ function computeReport() {
         <a class="nav-btn" href="#analysis">Final Analysis</a>
     </nav>`;
 
-    // --- HERO BOX (unified) ---
-    html += `<div class="hero-box" style="border-color:${kappaBand.color}44; background:linear-gradient(135deg, ${kappaBand.color}08, ${kappaBand.color}15);">
-        <div style="font-size:13px; font-weight:500; color:#6b7280;">Overall Reviewer Agreement</div>
-        <div class="verdict" style="color:${kappaBand.color};">${kappaBand.label}</div>
-        <div class="kappa-val">&kappa; = ${kappa.toFixed(3)}</div>
-        <div class="desc">Fleiss' Kappa — chance-corrected agreement across ${reviewers.length} reviewers on ${studyIds.length} studies</div>
-        <div class="stats-grid">
-            <div class="stat-cell"><div class="val" style="color:#1a1a2e;">${reviewers.length}</div><div class="label">Reviewers</div></div>
-            <div class="stat-cell"><div class="val" style="color:#1a1a2e;">${totalRegions}</div><div class="label">Total Flagged Regions</div></div>
-            <div class="stat-cell"><div class="val" style="color:${iouBand.color};">${(overallIoU * 100).toFixed(1)}%</div><div class="label">Strict IoU</div></div>
-            <div class="stat-cell"><div class="val" style="color:${getAgreementBand(tolerantIoU).color};">${(tolerantIoU * 100).toFixed(1)}%</div><div class="label">IoU (±5s tolerance)</div></div>
+    // --- HERO BOX (puzzle layout: verdict left, kappa top-right, stats bottom) ---
+    html += `<div style="border:2px solid ${kappaBand.color}44; border-radius:16px; background:linear-gradient(135deg, ${kappaBand.color}08, ${kappaBand.color}15); overflow:hidden; margin-bottom:24px;">
+        <div style="display:grid; grid-template-columns:1fr auto; gap:1px; background:${kappaBand.color}22;">
+            <div style="background:linear-gradient(135deg, ${kappaBand.color}05, ${kappaBand.color}12); padding:24px 28px; display:flex; flex-direction:column; justify-content:center;">
+                <div style="font-size:13px; font-weight:500; color:#6b7280;">Overall Reviewer Agreement</div>
+                <div style="font-size:36px; font-weight:800; color:${kappaBand.color}; margin:4px 0;">${kappaBand.label}</div>
+                <div style="font-size:12px; color:#6b7280;">Fleiss' Kappa — chance-corrected agreement across ${reviewers.length} reviewers on ${studyIds.length} studies</div>
+            </div>
+            <div style="background:#fff; padding:24px 32px; display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:140px;">
+                <div style="font-size:12px; font-weight:500; color:#6b7280;">Kappa Score</div>
+                <div style="font-size:32px; font-weight:800; color:${kappaBand.color}; margin:4px 0;">${kappa.toFixed(3)}</div>
+                <div style="font-size:11px; color:${kappaBand.color}; font-weight:600;">${kappaBand.label}</div>
+            </div>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:1px; background:${kappaBand.color}22;">
+            <div style="background:#fff; padding:14px 10px; text-align:center;"><div style="font-size:20px; font-weight:700; color:#1a1a2e;">${reviewers.length}</div><div style="font-size:11px; color:#6b7280;">Reviewers</div></div>
+            <div style="background:#fff; padding:14px 10px; text-align:center;"><div style="font-size:20px; font-weight:700; color:#1a1a2e;">${totalRegions}</div><div style="font-size:11px; color:#6b7280;">Total Flagged Regions</div></div>
+            <div style="background:#fff; padding:14px 10px; text-align:center;"><div style="font-size:20px; font-weight:700; color:${iouBand.color};">${(overallIoU * 100).toFixed(1)}%</div><div style="font-size:11px; color:#6b7280;">Strict IoU</div></div>
+            <div style="background:#fff; padding:14px 10px; text-align:center;"><div style="font-size:20px; font-weight:700; color:${getAgreementBand(tolerantIoU).color};">${(tolerantIoU * 100).toFixed(1)}%</div><div style="font-size:11px; color:#6b7280;">IoU (±5s tolerance)</div></div>
         </div>
     </div>`;
 
