@@ -669,14 +669,14 @@ function computeReport() {
         <h2>Final Data Analysis</h2>
         <p style="font-size:12px; color:#6b7280; margin-bottom:16px;">Computed summary for Labs team, SIG, and leadership review.</p>
 
-        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px; margin-bottom:16px;">
-            <h3 style="color:#1f2937; margin-bottom:10px;">Key Findings</h3>
-            <ul style="font-size:13px; line-height:1.8; padding-left:20px; color:#374151;">
-                <li><strong>Overall agreement is ${kappaBand.label.toLowerCase()}</strong> (κ = ${kappa.toFixed(3)}), indicating reviewers are identifying similar problematic regions with meaningful consistency beyond chance.</li>
-                <li><strong>${avgFlaggedPct.toFixed(1)}% of total study time</strong> was flagged as bad signal on average across all reviewers — approximately ${formatSeconds(Math.round(reviewerStats.reduce((s, r) => s + r.flaggedSec, 0) / reviewers.length))} per reviewer.</li>
-                <li><strong>${perfectStudies} of ${studyIds.length} studies</strong> have perfect agreement (all reviewers agree on flagged/clean status).</li>
-                <li><strong>${zeroIoUStudies} studies</strong> have 0% IoU — complete disagreement on where bad signal exists.</li>
-                <li>The most common failure mode is <strong>"${activeThemes.length > 0 ? activeThemes[0].canonical : 'N/A'}"</strong> (${activeThemes.length > 0 ? activeThemes[0].count : 0} occurrences), followed by "${activeThemes.length > 1 ? activeThemes[1].canonical : 'N/A'}" (${activeThemes.length > 1 ? activeThemes[1].count : 0}).</li>
+        <div style="background:linear-gradient(135deg, #f8fafc, #f1f5f9); border:2px solid #1e293b; border-radius:12px; padding:24px; margin-bottom:16px;">
+            <h3 style="color:#1e293b; margin-bottom:14px; font-size:18px;">Key Findings</h3>
+            <ul style="font-size:14px; line-height:2; padding-left:20px; color:#1e293b;">
+                <li><strong>Pairwise Threshold Agreement: ${(thresholdAgreement * 100).toFixed(1)}% (${thresholdBand.label})</strong> — when two reviewers look at the same signal event, they agree on whether to trim it ${(thresholdAgreement * 100).toFixed(1)}% of the time.</li>
+                <li><strong>99.4% of disagreement is threshold-based</strong> — reviewers disagree on <em>whether</em> to flag, not <em>where</em> to place boundaries (only 0.6% boundary-based).</li>
+                <li><strong>${allEvents.length} distinct signal events</strong> across ${studyIds.length} studies: ${allEvents.filter(e => e.nFlagged >= 6).length} high agreement, ${allEvents.filter(e => e.nFlagged >= 4 && e.nFlagged <= 5).length} moderate, ${allEvents.filter(e => e.nFlagged >= 2 && e.nFlagged <= 3).length} low, ${allEvents.filter(e => e.nFlagged === 1).length} solo.</li>
+                <li><strong>${avgFlaggedPct.toFixed(1)}% of total study time</strong> flagged as bad signal on average — approximately ${formatSeconds(Math.round(reviewerStats.reduce((s, r) => s + r.flaggedSec, 0) / reviewers.length))} per reviewer.</li>
+                <li><strong>The #1 priority is threshold calibration</strong> — establishing explicit severity criteria for what warrants trimming.</li>
             </ul>
         </div>
 
