@@ -656,6 +656,27 @@ function renderStudyChart(containerId, sm) {
         }).join('')}
     </div>`;
 
+    // Per-reviewer reasons/notes
+    chartHTML += `<div style="margin-top:12px;border-top:1px solid #e5e7eb;padding-top:10px;">
+        <div style="font-size:11px;color:#6b7280;font-weight:500;margin-bottom:6px;">Reviewer Notes</div>
+        ${reviewers.map((r, ri) => {
+            const trims = irrData[r][sm.sid] || [];
+            const color = REVIEWER_COLORS[ri % REVIEWER_COLORS.length];
+            if (trims.length === 0) return '';
+            return trims.map(t => {
+                const tStart = Math.max(0, (new Date(t.start).getTime() - startMs) / 1000);
+                const tEnd = Math.min(duration, (new Date(t.end).getTime() - startMs) / 1000);
+                const fmtTime = (s) => { const m = Math.floor(s/60); const sec = Math.floor(s%60); return m + ':' + String(sec).padStart(2,'0'); };
+                const reason = t.reason || 'No reason provided';
+                return `<div style="font-size:11px;margin-bottom:4px;padding:4px 8px;background:${color}08;border-left:3px solid ${color};border-radius:0 4px 4px 0;">
+                    <span style="font-weight:600;color:${color};">${r.replace('Reviewer ', 'R')}</span>
+                    <span style="color:#6b7280;"> ${fmtTime(tStart)}–${fmtTime(tEnd)}</span>
+                    <span style="color:#374151;"> — ${reason}</span>
+                </div>`;
+            }).join('');
+        }).join('')}
+    </div>`;
+
     document.getElementById(containerId).innerHTML = chartHTML;
 
     // Render Plotly chart
@@ -688,7 +709,7 @@ function renderStudyChart(containerId, sm) {
 
     const layout = {
         margin: { t: 10, b: 30, l: 40, r: 10 },
-        xaxis: { title: '', showgrid: false },
+        xaxis: { title: '', showgrid: false, range: [0, duration] },
         yaxis: { title: 'BPM', showgrid: true, gridcolor: '#f3f4f6' },
         shapes: shapes,
         showlegend: false,
