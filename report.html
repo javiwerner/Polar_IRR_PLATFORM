@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polar H10 — Inter-Rater Reliability Report</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; color: #1a1a2e; padding: 32px 24px; line-height: 1.5; }
+        .container { max-width: 1100px; margin: 0 auto; }
+        h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+        h2 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+        h3 { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+        .subtitle { font-size: 13px; color: #6b7280; margin-bottom: 24px; }
+        .section { margin-bottom: 32px; scroll-margin-top: 20px; }
+
+        /* Navigation */
+        .nav-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 28px; padding: 12px 16px; background: #fff; border-radius: 10px; border: 1px solid #e5e7eb; }
+        .nav-btn { padding: 6px 14px; font-size: 12px; font-weight: 500; border-radius: 20px; background: #f3f4f6; color: #374151; text-decoration: none; border: 1px solid #e5e7eb; cursor: pointer; transition: all 0.15s; }
+        .nav-btn:hover { background: #e0e7ff; border-color: #a5b4fc; color: #3730a3; }
+
+        /* Hero box */
+        .hero-box { border-radius: 16px; padding: 28px 24px 20px; margin-bottom: 24px; border: 2px solid; text-align: center; }
+        .hero-box .verdict { font-size: 36px; font-weight: 800; margin-bottom: 4px; }
+        .hero-box .kappa-val { font-size: 22px; font-weight: 600; color: #1a1a2e; }
+        .hero-box .desc { font-size: 12px; color: #6b7280; margin-top: 6px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: #e5e7eb; border-radius: 10px; overflow: hidden; margin-top: 18px; }
+        .stat-cell { padding: 14px 10px; background: #fff; text-align: center; }
+        .stat-cell .val { font-size: 20px; font-weight: 700; }
+        .stat-cell .label { font-size: 11px; color: #6b7280; margin-top: 2px; }
+
+        /* Metric key */
+        details.metric-key { margin-bottom: 24px; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px 16px; background: #fff; }
+        details.metric-key summary { font-size: 13px; font-weight: 600; color: #374151; cursor: pointer; }
+        details.metric-key .content { margin-top: 12px; font-size: 12px; color: #4b5563; line-height: 1.7; }
+        details.metric-key .content strong { color: #1f2937; }
+        .band-row { display: flex; gap: 6px; margin: 6px 0 10px; font-size: 11px; }
+        .band-chip { padding: 2px 8px; border-radius: 4px; font-weight: 500; }
+
+        /* Tables */
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th { text-align: left; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; background: #f9fafb; font-weight: 600; }
+        td { padding: 8px 6px; border-bottom: 1px solid #f3f4f6; }
+
+        /* Collapsible sections */
+        details.collapse-section { margin-bottom: 16px; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px 16px; background: #fff; }
+        details.collapse-section summary { font-size: 13px; font-weight: 600; color: #1f2937; cursor: pointer; }
+
+        /* Disagreement row */
+        .disag-row { cursor: pointer; background: #fef2f2; }
+        .disag-row:hover { background: #fee2e2; }
+
+        /* Chart container */
+        .chart-detail { padding: 16px 12px; background: #fafafa; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Polar H10 — Inter-Rater Reliability Report</h1>
+    <p class="subtitle">Signal quality assessment across 55 studies · Generated from 8 independent reviewers</p>
+
+    <div id="report"></div>
+</div>
+
+<script src="data.js"></script>
+<script src="trims.js"></script>
+<script>
+// ============================================================
+// CONSTANTS
+// ============================================================
+const STUDIES = STUDY_DATA;
+const irrData = IRR_TRIMS;
+
+const REVIEWER_COLORS = [
+    '#2563eb',  // blue (R1)
+    '#dc2626',  // red (R2)
+    '#059669',  // emerald (R3)
+    '#d97706',  // amber (R4)
+    '#7c3aed',  // violet (R6)
+    '#0284c7',  // sky (R7)
+    '#e11d48',  // rose (R8)
+    '#0d9488',  // teal (R9)
+];
+
+const THEMES = [
+    { canonical: 'Multi-device disagreement', description: 'Polar reading inconsistent with WHOOP reference devices',
+      patterns: ['multi device', 'multidevice', 'multi-device', 'multidevce', 'inconsistent with', 'other 3 device', 'other devices', 'whoop device', 'discrepancy', 'disgreement', 'disagreement', 'bpm disagree'] },
+    { canonical: 'Physiologically implausible', description: 'HR values or changes not biologically realistic',
+      patterns: ['physiolog', 'not realistic', 'unprobable', 'not probable', 'unlikely', 'unreliable', 'unrealistic', 'untrustworthy', 'not right'] },
+    { canonical: 'Poor signal shape / Stepwise', description: 'Flat lines, staircase pattern, or jagged non-smooth signal',
+      patterns: ['stepwise', 'poor plotting', 'plotting shape', 'jumpy', 'flat', 'visual cue', 'staircase'] },
+    { canonical: 'Sudden spikes or dropouts', description: 'Dramatic or abrupt HR jumps, drops, or signal loss',
+      patterns: ['spike', 'dramatic', 'sudden', 'significant drop', 'significant raise', 'significant hr', 'dropout', 'drop out', 'drops out', 'sramatic', 'anecdot', 'end of study'] },
+    { canonical: 'Delayed or missed HR response', description: 'Polar fails to track expected HR changes seen on other devices',
+      patterns: ['delay', 'not following', 'not catching', 'missed', 'stays low', 'not caught', 'not track', 'low confidence'] },
+];
+
+// ============================================================
+// HELPERS
+// ============================================================
+function formatSeconds(s) {
+    const m = Math.floor(s / 60);
+    const sec = Math.round(s % 60);
+    return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+}
+
+function getAgreementBand(val) {
+    if (val >= 0.81) return { label: 'Almost Perfect', color: '#15803d' };
+    if (val >= 0.61) return { label: 'Substantial', color: '#22c55e' };
+    if (val >= 0.41) return { label: 'Moderate', color: '#eab308' };
+    if (val >= 0.21) return { label: 'Fair', color: '#f97316' };
+    return { label: 'Poor', color: '#ef4444' };
+}
+
+function getSecondBins(trims, study) {
+    const startMs = new Date(study.polar.ts[0]).getTime();
+    const endMs = new Date(study.polar.ts[study.polar.ts.length - 1]).getTime();
+    const duration = Math.ceil((endMs - startMs) / 1000);
+    const bins = new Array(duration).fill(0);
+    (trims || []).forEach(t => {
+        const s = Math.max(0, Math.floor((new Date(t.start).getTime() - startMs) / 1000));
+        const e = Math.min(duration, Math.ceil((new Date(t.end).getTime() - startMs) / 1000));
+        for (let i = s; i < e; i++) bins[i] = 1;
+    });
+    return bins;
+}
+
+// ============================================================
+// COMPUTE AND RENDER
+// ============================================================
+function computeReport() {
+    const reviewers = Object.keys(irrData);
+    const studyIds = Object.keys(STUDIES);
+    const container = document.getElementById('report');
+
+    // Per-study metrics
+    const studyMetrics = [];
+    let totalIntersection = 0, totalUnion = 0;
+    const pairResults = [];
+    const reviewerStats = reviewers.map(() => ({ flaggedSec: 0, regionCount: 0, totalSec: 0 }));
+
+    studyIds.forEach(sid => {
+        const study = STUDIES[sid];
+        const startMs = new Date(study.polar.ts[0]).getTime();
+        const endMs = new Date(study.polar.ts[study.polar.ts.length - 1]).getTime();
+        const duration = Math.ceil((endMs - startMs) / 1000);
+        const allBins = reviewers.map((r, ri) => {
+            const trims = irrData[r][sid] || [];
+            reviewerStats[ri].regionCount += trims.length;
+            reviewerStats[ri].totalSec += duration;
+            const bins = getSecondBins(trims, study);
+            const flagged = bins.reduce((s, v) => s + v, 0);
+            reviewerStats[ri].flaggedSec += flagged;
+            return bins;
+        });
+
+        let sInt = 0, sUni = 0;
+        for (let i = 0; i < duration; i++) {
+            const anyFlagged = allBins.some(b => b[i]);
+            const allFlagged = allBins.every(b => b[i]);
+            if (anyFlagged) sUni++;
+            if (allFlagged) sInt++;
+        }
+        const studyIoU = sUni > 0 ? sInt / sUni : (allBins.every(b => b.reduce((s,v)=>s+v,0) === 0) ? 1 : 0);
+        const avgFlagged = allBins.reduce((s, b) => s + b.reduce((ss, v) => ss + v, 0), 0) / reviewers.length;
+        const flaggedPct = duration > 0 ? (avgFlagged / duration) * 100 : 0;
+        const regionsPerReviewer = reviewers.map(r => (irrData[r][sid] || []).length);
+
+        studyMetrics.push({ sid, campaign: study.campaign || '—', duration, studyIoU, flaggedPct, regionsPerReviewer, allBins, startMs, endMs });
+    });
+
+    // Global pairwise IoU
+    for (let a = 0; a < reviewers.length; a++) {
+        for (let b = a + 1; b < reviewers.length; b++) {
+            let pairInt = 0, pairUni = 0;
+            studyIds.forEach(sid => {
+                const study = STUDIES[sid];
+                const binsA = getSecondBins(irrData[reviewers[a]][sid], study);
+                const binsB = getSecondBins(irrData[reviewers[b]][sid], study);
+                for (let i = 0; i < binsA.length; i++) {
+                    if (binsA[i] || binsB[i]) { pairUni++; totalUnion++; }
+                    if (binsA[i] && binsB[i]) { pairInt++; totalIntersection++; }
+                }
+            });
+            pairResults.push({ a: reviewers[a], b: reviewers[b], iou: pairUni > 0 ? pairInt / pairUni : 1 });
+        }
+    }
+
+    // Fleiss' Kappa
+    let totalN = 0, sumP = 0;
+    const categoryTotals = [0, 0];
+    studyIds.forEach(sid => {
+        const study = STUDIES[sid];
+        const allBins = reviewers.map(r => getSecondBins(irrData[r][sid], study));
+        const duration = allBins[0].length;
+        const nR = reviewers.length;
+        for (let i = 0; i < duration; i++) {
+            const bad = allBins.reduce((s, b) => s + b[i], 0);
+            const notBad = nR - bad;
+            categoryTotals[0] += notBad;
+            categoryTotals[1] += bad;
+            sumP += (bad * (bad - 1) + notBad * (notBad - 1));
+            totalN++;
+        }
+    });
+    const nR = reviewers.length;
+    const Pbar = totalN > 0 ? sumP / (totalN * nR * (nR - 1)) : 0;
+    const totalRatings = totalN * nR;
+    const Pe = Math.pow(categoryTotals[0] / totalRatings, 2) + Math.pow(categoryTotals[1] / totalRatings, 2);
+    const kappa = Pe < 1 ? (Pbar - Pe) / (1 - Pe) : 1;
+    const overallIoU = totalUnion > 0 ? totalIntersection / totalUnion : 0;
+    const kappaBand = getAgreementBand(kappa);
+    const iouBand = getAgreementBand(overallIoU);
+
+    // Boundary-tolerant IoU
+    const TOLERANCE = 5;
+    let tolInt = 0, tolUni = 0;
+    for (let a = 0; a < reviewers.length; a++) {
+        for (let b = a + 1; b < reviewers.length; b++) {
+            studyIds.forEach(sid => {
+                const study = STUDIES[sid];
+                const binsA = getSecondBins(irrData[reviewers[a]][sid], study);
+                const binsB = getSecondBins(irrData[reviewers[b]][sid], study);
+                const dilA = new Array(binsA.length).fill(0);
+                const dilB = new Array(binsB.length).fill(0);
+                for (let i = 0; i < binsA.length; i++) {
+                    if (binsA[i]) for (let d = Math.max(0, i - TOLERANCE); d < Math.min(binsA.length, i + TOLERANCE + 1); d++) dilA[d] = 1;
+                    if (binsB[i]) for (let d = Math.max(0, i - TOLERANCE); d < Math.min(binsB.length, i + TOLERANCE + 1); d++) dilB[d] = 1;
+                }
+                for (let i = 0; i < dilA.length; i++) {
+                    if (dilA[i] || dilB[i]) tolUni++;
+                    if (dilA[i] && dilB[i]) tolInt++;
+                }
+            });
+        }
+    }
+    const tolerantIoU = tolUni > 0 ? tolInt / tolUni : 0;
+
+    // Per-campaign Kappa
+    const campaignGroups = {};
+    studyIds.forEach(sid => {
+        const camp = STUDIES[sid].campaign || 'Unknown';
+        if (!campaignGroups[camp]) campaignGroups[camp] = [];
+        campaignGroups[camp].push(sid);
+    });
+    const campaignKappas = Object.entries(campaignGroups).map(([camp, sids]) => {
+        let cTotalN = 0, cSumP = 0;
+        const cCatTotals = [0, 0];
+        sids.forEach(sid => {
+            const study = STUDIES[sid];
+            const allB = reviewers.map(r => getSecondBins(irrData[r][sid], study));
+            const dur = allB[0].length;
+            for (let i = 0; i < dur; i++) {
+                const bad = allB.reduce((s, b) => s + b[i], 0);
+                const notBad = nR - bad;
+                cCatTotals[0] += notBad;
+                cCatTotals[1] += bad;
+                cSumP += (bad * (bad - 1) + notBad * (notBad - 1));
+                cTotalN++;
+            }
+        });
+        const cPbar = cTotalN > 0 ? cSumP / (cTotalN * nR * (nR - 1)) : 0;
+        const cTotalRatings = cTotalN * nR;
+        const cPe = Math.pow(cCatTotals[0] / cTotalRatings, 2) + Math.pow(cCatTotals[1] / cTotalRatings, 2);
+        const cKappa = cPe < 1 ? (cPbar - cPe) / (1 - cPe) : 1;
+        return { campaign: camp, studies: sids.length, kappa: cKappa };
+    }).sort((a, b) => b.kappa - a.kappa);
+
+    // Disagreement spotlight
+    const disagreements = studyMetrics
+        .filter(sm => !sm.allBins.every(b => b.reduce((s,v)=>s+v,0) === 0))
+        .sort((a, b) => a.studyIoU - b.studyIoU)
+        .slice(0, 5);
+
+    // Reviewer stats
+    const avgFlagRate = reviewerStats.reduce((s, r) => s + (r.totalSec > 0 ? r.flaggedSec / r.totalSec : 0), 0) / reviewers.length;
+    const totalRegions = reviewerStats.reduce((s, r) => s + r.regionCount, 0);
+
+    // Reasons/themes
+    const allNotes = [];
+    const overlappingRegions = [];
+    studyIds.forEach(sid => {
+        const study = STUDIES[sid];
+        const startMs = new Date(study.polar.ts[0]).getTime();
+        const duration = Math.ceil((new Date(study.polar.ts[study.polar.ts.length - 1]).getTime() - startMs) / 1000);
+        const allTrims = [];
+        reviewers.forEach(r => {
+            (irrData[r][sid] || []).forEach(t => {
+                const note = (t.note || t.reason || '').trim();
+                if (note) allNotes.push(note);
+                allTrims.push({ reviewer: r, start: Math.max(0, (new Date(t.start).getTime() - startMs) / 1000), end: Math.min(duration, (new Date(t.end).getTime() - startMs) / 1000), note });
+            });
+        });
+        for (let i = 0; i < allTrims.length; i++) {
+            const cluster = [allTrims[i]];
+            for (let j = i + 1; j < allTrims.length; j++) {
+                if (allTrims[j].reviewer === allTrims[i].reviewer) continue;
+                if (allTrims[j].start < allTrims[i].end && allTrims[j].end > allTrims[i].start) {
+                    if (!cluster.find(c => c.reviewer === allTrims[j].reviewer)) cluster.push(allTrims[j]);
+                }
+            }
+            if (cluster.length >= 2 && cluster.some(c => c.note)) {
+                const key = sid + '_' + Math.round(cluster[0].start);
+                if (!overlappingRegions.find(o => o.key === key)) {
+                    overlappingRegions.push({ key, sid, cluster, startSec: Math.min(...cluster.map(c=>c.start)), endSec: Math.max(...cluster.map(c=>c.end)) });
+                }
+            }
+        }
+    });
+
+    const noteFreq = {};
+    allNotes.forEach(n => { const lower = n.toLowerCase(); noteFreq[lower] = (noteFreq[lower] || { text: n, count: 0 }); noteFreq[lower].count++; });
+    const sortedNotes = Object.values(noteFreq).sort((a, b) => b.count - a.count);
+
+    const themeCounts = THEMES.map(t => ({ ...t, count: 0, reviewerCounts: {} }));
+    allNotes.forEach(n => { const lower = n.toLowerCase(); themeCounts.forEach(t => { if (t.patterns.some(p => lower.includes(p))) t.count++; }); });
+    reviewers.forEach(r => {
+        const rNotes = [];
+        studyIds.forEach(sid => { (irrData[r][sid] || []).forEach(t => { const note = (t.note || t.reason || '').trim(); if (note) rNotes.push(note.toLowerCase()); }); });
+        themeCounts.forEach(tc => { tc.reviewerCounts[r] = rNotes.filter(n => tc.patterns.some(p => n.includes(p))).length; });
+    });
+    const activeThemes = themeCounts.filter(t => t.count > 0).sort((a, b) => b.count - a.count);
+
+    // ================================================================
+    // BUILD HTML
+    // ================================================================
+    let html = '';
+
+    // --- NAVIGATION ---
+    html += `<nav class="nav-bar">
+        <a class="nav-btn" href="#spotlight">Disagreement Spotlight</a>
+        <a class="nav-btn" href="#themes">Reasons Analysis</a>
+        <a class="nav-btn" href="#per-study">Per-Study Breakdown</a>
+        <a class="nav-btn" href="#pairwise">Pairwise Agreement</a>
+        <a class="nav-btn" href="#reviewers">Reviewer Comparison</a>
+        <a class="nav-btn" href="#analysis">Final Analysis</a>
+    </nav>`;
+
+    // --- HERO BOX (unified) ---
+    html += `<div class="hero-box" style="border-color:${kappaBand.color}44; background:linear-gradient(135deg, ${kappaBand.color}08, ${kappaBand.color}15);">
+        <div style="font-size:13px; font-weight:500; color:#6b7280;">Overall Reviewer Agreement</div>
+        <div class="verdict" style="color:${kappaBand.color};">${kappaBand.label}</div>
+        <div class="kappa-val">&kappa; = ${kappa.toFixed(3)}</div>
+        <div class="desc">Fleiss' Kappa — chance-corrected agreement across ${reviewers.length} reviewers on ${studyIds.length} studies</div>
+        <div class="stats-grid">
+            <div class="stat-cell"><div class="val" style="color:#1a1a2e;">${reviewers.length}</div><div class="label">Reviewers</div></div>
+            <div class="stat-cell"><div class="val" style="color:#1a1a2e;">${totalRegions}</div><div class="label">Total Flagged Regions</div></div>
+            <div class="stat-cell"><div class="val" style="color:${iouBand.color};">${(overallIoU * 100).toFixed(1)}%</div><div class="label">Strict IoU</div></div>
+            <div class="stat-cell"><div class="val" style="color:${getAgreementBand(tolerantIoU).color};">${(tolerantIoU * 100).toFixed(1)}%</div><div class="label">IoU (±5s tolerance)</div></div>
+        </div>
+    </div>`;
+
+    // --- METRIC KEY ---
+    html += `<details class="metric-key">
+        <summary>Understanding These Metrics</summary>
+        <div class="content">
+            <p><strong>Fleiss' Kappa (κ)</strong> measures the degree of agreement between multiple raters beyond what would be expected by pure chance. A κ of 0 means raters agree only as much as random guessing would predict; κ = 1 means perfect agreement. It accounts for the "base rate" — if 95% of the signal is clean, raters will agree on those parts by default, so Kappa isolates meaningful consensus.</p>
+            <div class="band-row">
+                <span class="band-chip" style="background:#fef2f2;color:#ef4444;">< 0.20 Poor</span>
+                <span class="band-chip" style="background:#fff7ed;color:#f97316;">0.21–0.40 Fair</span>
+                <span class="band-chip" style="background:#fefce8;color:#eab308;">0.41–0.60 Moderate</span>
+                <span class="band-chip" style="background:#f0fdf4;color:#22c55e;">0.61–0.80 Substantial</span>
+                <span class="band-chip" style="background:#ecfdf5;color:#15803d;">0.81–1.00 Almost Perfect</span>
+            </div>
+            <p><strong>Strict IoU (Intersection over Union)</strong> measures how much the flagged time regions physically overlap across all reviewer pairs. Intersection = seconds flagged by both; Union = seconds flagged by either. 100% means all reviewers flagged exactly the same time windows; 0% means no overlap at all.</p>
+            <p style="margin-top:8px;"><strong>Tolerant IoU (±5s)</strong> applies a 5-second boundary dilation before computing overlap. This accounts for the inherent imprecision of manually selecting trim boundaries — two reviewers may identify the same bad region but disagree on the exact start/end by a few seconds. The tolerance captures "same intent, slightly different boundaries."</p>
+        </div>
+    </details>`;
+
+    // --- DISAGREEMENT SPOTLIGHT ---
+    html += `<div class="section" id="spotlight">
+        <h2>Disagreement Spotlight</h2>
+        <p style="font-size:12px; color:#6b7280; margin-bottom:12px;">Top 5 studies with lowest agreement. Click to expand chart and notes.</p>
+        <table>
+            <tr><th style="text-align:left;">Study</th><th style="text-align:left;">Campaign</th><th style="text-align:right;">Duration</th><th style="text-align:right;">Regions</th><th style="text-align:right;">IoU</th></tr>
+            ${disagreements.map((sm, di) => {
+                const band = getAgreementBand(sm.studyIoU);
+                return `<tr class="disag-row" onclick="toggleDisagDetail(${di})">
+                    <td style="font-weight:500;"><span id="disag_chev_${di}" style="display:inline-block;transition:transform 0.2s;margin-right:6px;font-size:10px;color:#9ca3af;">&#9654;</span>${sm.sid}</td>
+                    <td>${sm.campaign}</td>
+                    <td style="text-align:right;">${formatSeconds(sm.duration)}</td>
+                    <td style="text-align:right;font-size:11px;">${sm.regionsPerReviewer.map((c, i) => `${reviewers[i].replace('Reviewer ', 'R')}:${c}`).join(' ')}</td>
+                    <td style="text-align:right;color:${band.color};font-weight:600;">${(sm.studyIoU * 100).toFixed(1)}%</td>
+                </tr>
+                <tr id="disag_detail_${di}" style="display:none;">
+                    <td colspan="5" class="chart-detail"><div id="disag_chart_${di}"></div></td>
+                </tr>`;
+            }).join('')}
+        </table>
+    </div>`;
+
+    // --- REASONS ANALYSIS ---
+    html += `<div class="section" id="themes"><h2>Reasons Analysis</h2>`;
+    if (activeThemes.length > 0) {
+        const maxCount = activeThemes[0].count;
+        html += `<div style="margin-bottom:20px;">
+            <h3>Distilled Themes</h3>
+            <p style="font-size:11px; color:#6b7280; margin:4px 0 12px;">5 canonical failure categories distilled from ${allNotes.length} reviewer notes.</p>
+            ${activeThemes.map(t => `<div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                <div style="width:220px; flex-shrink:0;">
+                    <div style="font-size:12px; font-weight:600;">${t.canonical}</div>
+                    <div style="font-size:10px; color:#6b7280; margin-top:2px;">${t.description}</div>
+                </div>
+                <div style="flex:1; height:20px; background:#f3f4f6; border-radius:4px; overflow:hidden;">
+                    <div style="height:100%; width:${(t.count / maxCount) * 100}%; background:#3b82f6; border-radius:4px;"></div>
+                </div>
+                <span style="font-size:12px; font-weight:600; width:36px; text-align:right;">${t.count}</span>
+            </div>`).join('')}
+        </div>`;
+
+        html += `<div style="margin-bottom:20px;">
+            <h3>Theme Usage by Reviewer</h3>
+            <table>
+                <tr><th>Theme</th>${reviewers.map((r, i) => `<th style="text-align:center;color:${REVIEWER_COLORS[i]};">${r.replace('Reviewer ', 'R')}</th>`).join('')}<th style="text-align:right;">Total</th></tr>
+                ${activeThemes.map(t => `<tr>
+                    <td style="font-weight:500;">${t.canonical}</td>
+                    ${reviewers.map(r => `<td style="text-align:center;">${t.reviewerCounts[r] || 0}</td>`).join('')}
+                    <td style="text-align:right;font-weight:600;">${t.count}</td>
+                </tr>`).join('')}
+            </table>
+        </div>`;
+    }
+
+    // Raw notes (collapsible)
+    if (sortedNotes.length > 0) {
+        html += `<details class="collapse-section">
+            <summary>Raw Note Frequency <span style="font-weight:400; color:#6b7280;">(${sortedNotes.length} unique phrases)</span></summary>
+            <table style="margin-top:10px;">
+                <tr><th>Reason</th><th style="text-align:right;">Count</th></tr>
+                ${sortedNotes.slice(0, 30).map(n => `<tr><td>${n.text}</td><td style="text-align:right;font-weight:500;">${n.count}</td></tr>`).join('')}
+            </table>
+        </details>`;
+    }
+
+    // Overlapping reasons (collapsible)
+    if (overlappingRegions.length > 0) {
+        html += `<details class="collapse-section">
+            <summary>Compared Reasons on Overlapping Regions <span style="font-weight:400; color:#6b7280;">(${overlappingRegions.length} regions)</span></summary>
+            <table style="margin-top:10px; font-size:11px;">
+                <tr><th>Study</th><th>Time</th>${reviewers.map((r, i) => `<th style="color:${REVIEWER_COLORS[i]};">${r.replace('Reviewer ', 'R')}</th>`).join('')}</tr>
+                ${overlappingRegions.slice(0, 40).map(o => `<tr>
+                    <td style="font-weight:500;">${o.sid}</td>
+                    <td>${formatSeconds(Math.round(o.startSec))} → ${formatSeconds(Math.round(o.endSec))}</td>
+                    ${reviewers.map(r => { const match = o.cluster.find(c => c.reviewer === r); return `<td style="color:${match && match.note ? '#374151' : '#d1d5db'};">${match ? (match.note || '—') : ''}</td>`; }).join('')}
+                </tr>`).join('')}
+            </table>
+            ${overlappingRegions.length > 40 ? `<p style="font-size:11px;color:#6b7280;margin-top:6px;">Showing 40 of ${overlappingRegions.length}.</p>` : ''}
+        </details>`;
+    }
+    html += `</div>`;
+
+    // --- PER-STUDY BREAKDOWN ---
+    html += `<div class="section" id="per-study">
+        <h2>Per-Study Breakdown</h2>
+        <p style="font-size:12px; color:#6b7280; margin-bottom:12px;">Click a study to expand timeline and chart.</p>
+        <table>
+            <tr><th>Study</th><th>Campaign</th><th style="text-align:right;">Duration</th><th style="text-align:right;">Flagged %</th><th style="text-align:right;">IoU</th><th style="text-align:right;">Agreement</th></tr>
+            ${studyMetrics.map((sm, idx) => {
+                const band = getAgreementBand(sm.studyIoU);
+                const noFlags = sm.allBins.every(b => b.reduce((s,v)=>s+v,0) === 0);
+                return `<tr style="cursor:pointer;" onclick="toggleStudyDetail(${idx})">
+                    <td style="font-weight:500;"><span id="chevron_${idx}" style="display:inline-block;transition:transform 0.2s;margin-right:6px;font-size:10px;color:#9ca3af;">&#9654;</span>${sm.sid}</td>
+                    <td>${sm.campaign}</td>
+                    <td style="text-align:right;">${formatSeconds(sm.duration)}</td>
+                    <td style="text-align:right;">${sm.flaggedPct.toFixed(1)}%</td>
+                    <td style="text-align:right;">${noFlags ? '—' : (sm.studyIoU * 100).toFixed(1) + '%'}</td>
+                    <td style="text-align:right;color:${band.color};font-weight:500;">${noFlags ? 'All Clear' : band.label}</td>
+                </tr>
+                <tr id="studyDetail_${idx}" style="display:none;">
+                    <td colspan="6" class="chart-detail"><div id="study_chart_${idx}"></div></td>
+                </tr>`;
+            }).join('')}
+        </table>
+    </div>`;
+
+    // --- PAIRWISE AGREEMENT ---
+    html += `<div class="section" id="pairwise">
+        <h2>Pairwise Agreement</h2>
+        <table>
+            <tr><th>Pair</th><th style="text-align:right;">IoU</th><th style="text-align:right;">Level</th></tr>
+            ${pairResults.map(p => {
+                const band = getAgreementBand(p.iou);
+                return `<tr><td>${p.a} vs ${p.b}</td><td style="text-align:right;">${(p.iou * 100).toFixed(1)}%</td><td style="text-align:right;color:${band.color};font-weight:500;">${band.label}</td></tr>`;
+            }).join('')}
+        </table>
+    </div>`;
+
+    // --- REVIEWER COMPARISON ---
+    html += `<div class="section" id="reviewers">
+        <h2>Reviewer Comparison</h2>
+        <table>
+            <tr><th>Reviewer</th><th style="text-align:right;">Regions</th><th style="text-align:right;">Flagged Time</th><th style="text-align:right;">Flag Rate</th><th style="text-align:right;">Status</th></tr>
+            ${reviewers.map((r, i) => {
+                const rate = reviewerStats[i].totalSec > 0 ? reviewerStats[i].flaggedSec / reviewerStats[i].totalSec : 0;
+                const isOutlier = avgFlagRate > 0 && (rate > avgFlagRate * 2 || rate < avgFlagRate * 0.5);
+                return `<tr>
+                    <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${REVIEWER_COLORS[i]};margin-right:6px;"></span>${r}</td>
+                    <td style="text-align:right;">${reviewerStats[i].regionCount}</td>
+                    <td style="text-align:right;">${formatSeconds(reviewerStats[i].flaggedSec)}</td>
+                    <td style="text-align:right;">${(rate * 100).toFixed(1)}%</td>
+                    <td style="text-align:right;color:${isOutlier ? '#f97316' : '#22c55e'};font-weight:500;">${isOutlier ? 'Outlier' : 'Normal'}</td>
+                </tr>`;
+            }).join('')}
+            <tr style="border-top:2px solid #e5e7eb; font-weight:600;">
+                <td>Average</td>
+                <td style="text-align:right;">${Math.round(reviewerStats.reduce((s, r) => s + r.regionCount, 0) / reviewers.length)}</td>
+                <td style="text-align:right;">${formatSeconds(Math.round(reviewerStats.reduce((s, r) => s + r.flaggedSec, 0) / reviewers.length))}</td>
+                <td style="text-align:right;">${(avgFlagRate * 100).toFixed(1)}%</td>
+                <td style="text-align:right;color:#6b7280;">—</td>
+            </tr>
+        </table>
+    </div>`;
+
+    // --- FINAL DATA ANALYSIS ---
+    const totalStudyTime = reviewerStats[0].totalSec;
+    const avgFlaggedPct = (reviewerStats.reduce((s, r) => s + r.flaggedSec, 0) / reviewers.length) / totalStudyTime * 100;
+    const perfectStudies = studyMetrics.filter(sm => sm.studyIoU === 1 || sm.allBins.every(b => b.reduce((s,v)=>s+v,0) === 0)).length;
+    const zeroIoUStudies = studyMetrics.filter(sm => sm.studyIoU === 0 && !sm.allBins.every(b => b.reduce((s,v)=>s+v,0) === 0)).length;
+    const bestCampaign = campaignKappas[0];
+    const worstCampaign = campaignKappas[campaignKappas.length - 1];
+    const mostFlagging = reviewers.reduce((max, r, i) => reviewerStats[i].regionCount > reviewerStats[max].regionCount ? i : max, 0);
+    const leastFlagging = reviewers.reduce((min, r, i) => reviewerStats[i].regionCount < reviewerStats[min].regionCount ? i : min, 0);
+    const bestPair = pairResults.reduce((best, p) => p.iou > best.iou ? p : best, pairResults[0]);
+    const worstPair = pairResults.reduce((worst, p) => p.iou < worst.iou ? p : worst, pairResults[0]);
+    const highConfidenceExclude = studyMetrics.filter(sm => {
+        const flaggedByAll = sm.allBins.every(b => b.reduce((s,v)=>s+v,0) > 0);
+        return flaggedByAll && sm.studyIoU >= 0.4;
+    }).length;
+
+    html += `<div class="section" id="analysis">
+        <h2>Final Data Analysis</h2>
+        <p style="font-size:12px; color:#6b7280; margin-bottom:16px;">Computed summary for Labs team, SIG, and leadership review.</p>
+
+        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px; margin-bottom:16px;">
+            <h3 style="color:#1f2937; margin-bottom:10px;">Key Findings</h3>
+            <ul style="font-size:13px; line-height:1.8; padding-left:20px; color:#374151;">
+                <li><strong>Overall agreement is ${kappaBand.label.toLowerCase()}</strong> (κ = ${kappa.toFixed(3)}), indicating reviewers are identifying similar problematic regions with meaningful consistency beyond chance.</li>
+                <li><strong>${avgFlaggedPct.toFixed(1)}% of total study time</strong> was flagged as bad signal on average across all reviewers — approximately ${formatSeconds(Math.round(reviewerStats.reduce((s, r) => s + r.flaggedSec, 0) / reviewers.length))} per reviewer.</li>
+                <li><strong>${perfectStudies} of ${studyIds.length} studies</strong> have perfect agreement (all reviewers agree on flagged/clean status).</li>
+                <li><strong>${zeroIoUStudies} studies</strong> have 0% IoU — complete disagreement on where bad signal exists.</li>
+                <li>The most common failure mode is <strong>"${activeThemes.length > 0 ? activeThemes[0].canonical : 'N/A'}"</strong> (${activeThemes.length > 0 ? activeThemes[0].count : 0} occurrences), followed by "${activeThemes.length > 1 ? activeThemes[1].canonical : 'N/A'}" (${activeThemes.length > 1 ? activeThemes[1].count : 0}).</li>
+            </ul>
+        </div>
+
+        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px; margin-bottom:16px;">
+            <h3 style="color:#1f2937; margin-bottom:10px;">Reviewer Behavior Analysis</h3>
+            <ul style="font-size:13px; line-height:1.8; padding-left:20px; color:#374151;">
+                <li><strong>Most conservative:</strong> ${reviewers[leastFlagging]} (${reviewerStats[leastFlagging].regionCount} regions, ${(reviewerStats[leastFlagging].flaggedSec / reviewerStats[leastFlagging].totalSec * 100).toFixed(1)}% flag rate)</li>
+                <li><strong>Most aggressive:</strong> ${reviewers[mostFlagging]} (${reviewerStats[mostFlagging].regionCount} regions, ${(reviewerStats[mostFlagging].flaggedSec / reviewerStats[mostFlagging].totalSec * 100).toFixed(1)}% flag rate)</li>
+                <li><strong>Best-aligned pair:</strong> ${bestPair.a} & ${bestPair.b} (${(bestPair.iou * 100).toFixed(1)}% IoU)</li>
+                <li><strong>Most-divergent pair:</strong> ${worstPair.a} & ${worstPair.b} (${(worstPair.iou * 100).toFixed(1)}% IoU)</li>
+                <li>Flag rate range: ${(Math.min(...reviewerStats.map(r => r.flaggedSec / r.totalSec)) * 100).toFixed(1)}% – ${(Math.max(...reviewerStats.map(r => r.flaggedSec / r.totalSec)) * 100).toFixed(1)}% (${(Math.max(...reviewerStats.map(r => r.flaggedSec / r.totalSec)) / Math.min(...reviewerStats.map(r => r.flaggedSec / r.totalSec))).toFixed(1)}x spread)</li>
+            </ul>
+        </div>
+
+        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px; margin-bottom:16px;">
+            <h3 style="color:#1f2937; margin-bottom:10px;">Campaign-Level Insights</h3>
+            <ul style="font-size:13px; line-height:1.8; padding-left:20px; color:#374151;">
+                <li><strong>Highest agreement:</strong> ${bestCampaign.campaign} (κ = ${bestCampaign.kappa.toFixed(3)}, ${bestCampaign.studies} studies)</li>
+                <li><strong>Lowest agreement:</strong> ${worstCampaign.campaign} (κ = ${worstCampaign.kappa.toFixed(3)}, ${worstCampaign.studies} studies)</li>
+                ${campaignKappas.map(c => `<li>${c.campaign}: κ = ${c.kappa.toFixed(3)} (${getAgreementBand(c.kappa).label}) — ${c.studies} studies</li>`).join('')}
+            </ul>
+        </div>
+
+        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px; margin-bottom:16px;">
+            <h3 style="color:#1f2937; margin-bottom:10px;">Signal Quality Assessment</h3>
+            <ul style="font-size:13px; line-height:1.8; padding-left:20px; color:#374151;">
+                <li><strong>Total flagged time across all reviewers:</strong> ${formatSeconds(reviewerStats.reduce((s, r) => s + r.flaggedSec, 0))} (${totalRegions} discrete regions)</li>
+                <li><strong>Average per-study flagging:</strong> ${(studyMetrics.reduce((s, sm) => s + sm.flaggedPct, 0) / studyMetrics.length).toFixed(1)}% of study duration</li>
+                <li><strong>Most flagged study:</strong> ${studyMetrics.sort((a,b) => b.flaggedPct - a.flaggedPct)[0].sid} (${studyMetrics.sort((a,b) => b.flaggedPct - a.flaggedPct)[0].flaggedPct.toFixed(1)}% flagged)</li>
+                <li><strong>Studies where all reviewers flagged something:</strong> ${studyMetrics.filter(sm => sm.allBins.every(b => b.reduce((s,v)=>s+v,0) > 0)).length} of ${studyIds.length}</li>
+                <li><strong>Studies with no flags from any reviewer:</strong> ${studyMetrics.filter(sm => sm.allBins.every(b => b.reduce((s,v)=>s+v,0) === 0)).length} of ${studyIds.length}</li>
+            </ul>
+        </div>
+
+        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px;">
+            <h3 style="color:#1f2937; margin-bottom:10px;">Recommendations</h3>
+            <ul style="font-size:13px; line-height:1.8; padding-left:20px; color:#374151;">
+                <li><strong>Adjudication needed:</strong> The ${zeroIoUStudies} studies with 0% IoU should undergo a consensus review session where reviewers discuss their rationale to establish ground truth.</li>
+                <li><strong>High-confidence exclusions:</strong> Studies where all ${reviewers.length} reviewers flagged regions with IoU ≥ 40% can be confidently marked for signal exclusion (${highConfidenceExclude} studies qualify).</li>
+                <li><strong>Protocol refinement:</strong> The ${(tolerantIoU * 100 - overallIoU * 100).toFixed(1)} percentage-point gain from ±5s tolerance suggests boundary imprecision is a small factor — disagreements are mostly about <em>whether</em> to flag, not <em>where</em> boundaries are.</li>
+                <li><strong>Reviewer calibration:</strong> Consider a calibration session for reviewers with flag rates significantly above/below the ${(avgFlagRate * 100).toFixed(1)}% group mean to align thresholds.</li>
+                <li><strong>Dominant failure mode:</strong> "${activeThemes.length > 0 ? activeThemes[0].canonical : 'N/A'}" accounts for the plurality of flags — establishing explicit decision rules for this category could improve future agreement.</li>
+            </ul>
+        </div>
+    </div>`;
+
+    container.innerHTML = html;
+
+    // Store for detail expansion
+    window._studyMetrics = studyMetrics;
+    window._disagreements = disagreements;
+    window._reviewers = reviewers;
+}
+
+// ============================================================
+// CHART RENDERING (shared by Disagreement Spotlight + Per-Study)
+// ============================================================
+function renderStudyChart(containerId, sm) {
+    const reviewers = window._reviewers;
+    const study = STUDIES[sm.sid];
+    const startMs = sm.startMs;
+    const duration = sm.duration;
+
+    let chartHTML = '';
+
+    // Agreement bar
+    let agreementRegions = '';
+    let inRegion = false, regionStart = 0;
+    for (let i = 0; i <= duration; i++) {
+        const allFlagged = i < duration && sm.allBins.every(b => b[i]);
+        if (allFlagged && !inRegion) { inRegion = true; regionStart = i; }
+        if (!allFlagged && inRegion) {
+            inRegion = false;
+            const left = (regionStart / duration) * 100;
+            const width = ((i - regionStart) / duration) * 100;
+            agreementRegions += `<div style="position:absolute;left:${left}%;width:${width}%;height:100%;background:#16a34a;opacity:0.7;border-radius:5px;" title="All agree: ${formatSeconds(regionStart)} — ${formatSeconds(i)}"></div>`;
+        }
+    }
+    chartHTML += `<div style="margin-bottom:8px;">
+        <div style="font-size:11px;color:#16a34a;font-weight:600;margin-bottom:3px;">Agreement <span style="font-weight:400;color:#6b7280;">— green = all agree bad signal</span></div>
+        <div style="position:relative;height:10px;background:#f3f4f6;border-radius:5px;overflow:hidden;">${agreementRegions}</div>
+    </div>`;
+
+    // Plotly chart div
+    chartHTML += `<div id="${containerId}_plotly" style="width:100%;height:200px;"></div>`;
+
+    // Per-reviewer bars
+    chartHTML += `<div style="margin-top:8px;">
+        <div style="font-size:11px;color:#6b7280;font-weight:500;margin-bottom:4px;">Individual Reviewers</div>
+        ${reviewers.map((r, ri) => {
+            const trims = irrData[r][sm.sid] || [];
+            const color = REVIEWER_COLORS[ri % REVIEWER_COLORS.length];
+            let bars = '';
+            trims.forEach(t => {
+                const tStart = Math.max(0, (new Date(t.start).getTime() - startMs) / 1000);
+                const tEnd = Math.min(duration, (new Date(t.end).getTime() - startMs) / 1000);
+                const left = (tStart / duration) * 100;
+                const width = ((tEnd - tStart) / duration) * 100;
+                bars += `<div style="position:absolute;left:${left}%;width:${width}%;height:100%;background:${color};opacity:0.6;border-radius:5px;"></div>`;
+            });
+            return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
+                <div style="position:relative;flex:1;height:10px;background:#f3f4f6;border-radius:5px;overflow:hidden;">${bars}</div>
+                <span style="font-size:10px;font-weight:600;color:${color};width:24px;text-align:right;">${r.replace('Reviewer ', 'R')}</span>
+            </div>`;
+        }).join('')}
+    </div>`;
+
+    document.getElementById(containerId).innerHTML = chartHTML;
+
+    // Render Plotly chart
+    const traces = [];
+    // Polar trace
+    const polarTs = study.polar.ts.map(t => (new Date(t).getTime() - startMs) / 1000);
+    traces.push({ x: polarTs, y: study.polar.hr, type: 'scatter', mode: 'lines', name: 'Polar H10', line: { color: '#1a1a2e', width: 2 } });
+
+    // WHOOP traces
+    if (study.whoop) {
+        const whoopKeys = Object.keys(study.whoop);
+        whoopKeys.forEach((key, wi) => {
+            const wd = study.whoop[key];
+            const wTs = wd.ts.map(t => (new Date(t).getTime() - startMs) / 1000);
+            traces.push({ x: wTs, y: wd.hr, type: 'scatter', mode: 'lines', name: `WHOOP ${wi + 1}`, line: { color: '#9ca3af', width: 1, dash: 'dot' } });
+        });
+    }
+
+    // Overlay shapes for each reviewer's trims
+    const shapes = [];
+    reviewers.forEach((r, ri) => {
+        const trims = irrData[r][sm.sid] || [];
+        const color = REVIEWER_COLORS[ri % REVIEWER_COLORS.length];
+        trims.forEach(t => {
+            const x0 = Math.max(0, (new Date(t.start).getTime() - startMs) / 1000);
+            const x1 = Math.min(duration, (new Date(t.end).getTime() - startMs) / 1000);
+            shapes.push({ type: 'rect', xref: 'x', yref: 'paper', x0, x1, y0: 0, y1: 1, fillcolor: color, opacity: 0.12, line: { width: 2, color: color } });
+        });
+    });
+
+    const layout = {
+        margin: { t: 10, b: 30, l: 40, r: 10 },
+        xaxis: { title: '', showgrid: false },
+        yaxis: { title: 'BPM', showgrid: true, gridcolor: '#f3f4f6' },
+        shapes: shapes,
+        showlegend: false,
+        height: 200,
+    };
+
+    Plotly.newPlot(`${containerId}_plotly`, traces, layout, { displayModeBar: false, responsive: true });
+}
+
+function toggleDisagDetail(di) {
+    const row = document.getElementById('disag_detail_' + di);
+    const chev = document.getElementById('disag_chev_' + di);
+    if (!row) return;
+    if (row.style.display === 'none') {
+        row.style.display = 'table-row';
+        if (chev) chev.style.transform = 'rotate(90deg)';
+        const sm = window._disagreements[di];
+        renderStudyChart('disag_chart_' + di, sm);
+    } else {
+        row.style.display = 'none';
+        if (chev) chev.style.transform = '';
+    }
+}
+
+function toggleStudyDetail(idx) {
+    const row = document.getElementById('studyDetail_' + idx);
+    const chev = document.getElementById('chevron_' + idx);
+    if (!row) return;
+    if (row.style.display === 'none') {
+        row.style.display = 'table-row';
+        if (chev) chev.style.transform = 'rotate(90deg)';
+        const sm = window._studyMetrics[idx];
+        renderStudyChart('study_chart_' + idx, sm);
+    } else {
+        row.style.display = 'none';
+        if (chev) chev.style.transform = '';
+    }
+}
+
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', computeReport);
+</script>
+</body>
+</html>
