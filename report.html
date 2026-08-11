@@ -510,9 +510,9 @@ function computeReport() {
     </details>`;
 
     // --- DISAGREEMENT SPOTLIGHT ---
-    html += `<div class="section" id="spotlight">
-        <h2>Disagreement Spotlight</h2>
-        <p style="font-size:12px; color:#6b7280; margin-bottom:12px;">Top 5 studies with lowest agreement. Click to expand chart and notes.</p>
+    html += `<details class="section" id="spotlight" style="border:1px solid #e5e7eb; border-radius:12px; padding:16px 20px; margin-bottom:24px;">
+        <summary style="cursor:pointer; font-size:18px; font-weight:700; color:#1f2937;">Disagreement Spotlight</summary>
+        <p style="font-size:12px; color:#6b7280; margin:8px 0 12px;">Top 5 studies with lowest agreement. Click to expand chart and notes.</p>
         <table>
             <tr><th style="text-align:left;">Study</th><th style="text-align:left;">Campaign</th><th style="text-align:right;">Duration</th><th style="text-align:right;">Regions</th><th style="text-align:right;">IoU</th></tr>
             ${disagreements.map((sm, di) => {
@@ -529,7 +529,7 @@ function computeReport() {
                 </tr>`;
             }).join('')}
         </table>
-    </div>`;
+    </details>`;
 
     // --- REASONS ANALYSIS ---
     html += `<div class="section" id="themes"><h2>Reasons Analysis</h2>`;
