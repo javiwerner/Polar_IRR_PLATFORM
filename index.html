@@ -1001,6 +1001,18 @@ function computeIRR() {
                 </tr>
                 ${disagreements.map((sm, di) => {
                     const band = getAgreementBand(sm.studyIoU);
+                    // Build per-reviewer notes for this study
+                    const detailRows = reviewers.map((r, ri) => {
+                        const trims = irrData[r][sm.sid] || [];
+                        if (trims.length === 0) return '';
+                        const notes = trims.map(t => {
+                            const note = (t.note || t.reason || '').trim();
+                            const startSec = Math.round((new Date(t.start).getTime() - sm.startMs) / 1000);
+                            const endSec = Math.round((new Date(t.end).getTime() - sm.startMs) / 1000);
+                            return `<span style="color:#374151;">${formatSeconds(startSec)}–${formatSeconds(endSec)}</span>: ${note || '<em style="color:#9ca3af;">no note</em>'}`;
+                        }).join('<br>');
+                        return `<div style="margin-bottom:6px;"><strong style="color:${REVIEWER_COLORS[ri % REVIEWER_COLORS.length]};">${r}</strong><br>${notes}</div>`;
+                    }).filter(Boolean).join('');
                     return `<tr style="border-bottom:1px solid #f3f4f6; cursor:pointer; background:#fef2f2;" onclick="document.getElementById('disagDetail_${di}').style.display=document.getElementById('disagDetail_${di}').style.display==='none'?'table-row':'none'">
                         <td style="padding:8px 6px; font-weight:500;"><span style="font-size:10px;color:#9ca3af;margin-right:6px;">&#9654;</span>${sm.sid}</td>
                         <td style="padding:8px 6px;">${sm.campaign}</td>
@@ -1009,7 +1021,7 @@ function computeIRR() {
                         <td style="text-align:right;padding:8px 6px;color:${band.color};font-weight:600;">${(sm.studyIoU * 100).toFixed(1)}%</td>
                     </tr>
                     <tr id="disagDetail_${di}" style="display:none;">
-                        <td colspan="5" style="padding:12px 6px; background:#fafafa; font-size:11px;"></td>
+                        <td colspan="5" style="padding:12px 14px; background:#fafafa; font-size:11px;">${detailRows || '<em style="color:#9ca3af;">No trims recorded.</em>'}</td>
                     </tr>`;
                 }).join('')}
             </table>
