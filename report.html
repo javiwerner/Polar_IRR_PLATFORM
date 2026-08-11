@@ -106,11 +106,19 @@ function formatSeconds(s) {
 }
 
 function getAgreementBand(val) {
-    if (val >= 0.81) return { label: 'Almost Perfect', color: '#15803d' };
-    if (val >= 0.61) return { label: 'Substantial', color: '#22c55e' };
-    if (val >= 0.41) return { label: 'Moderate', color: '#eab308' };
-    if (val >= 0.21) return { label: 'Fair', color: '#f97316' };
-    return { label: 'Poor', color: '#ef4444' };
+    if (val >= 0.95) return { label: 'A+', color: '#15803d' };
+    if (val >= 0.90) return { label: 'A', color: '#16a34a' };
+    if (val >= 0.85) return { label: 'A-', color: '#22c55e' };
+    if (val >= 0.80) return { label: 'B+', color: '#65a30d' };
+    if (val >= 0.75) return { label: 'B', color: '#ca8a04' };
+    if (val >= 0.70) return { label: 'B-', color: '#eab308' };
+    if (val >= 0.65) return { label: 'C+', color: '#f59e0b' };
+    if (val >= 0.60) return { label: 'C', color: '#f97316' };
+    if (val >= 0.55) return { label: 'C-', color: '#ea580c' };
+    if (val >= 0.50) return { label: 'D+', color: '#dc2626' };
+    if (val >= 0.45) return { label: 'D', color: '#b91c1c' };
+    if (val >= 0.40) return { label: 'D-', color: '#991b1b' };
+    return { label: 'F', color: '#7f1d1d' };
 }
 
 function getSecondBins(trims, study) {
@@ -363,12 +371,20 @@ function computeReport() {
         <summary>Understanding These Metrics</summary>
         <div class="content">
             <p><strong>Fleiss' Kappa (κ)</strong> measures the degree of agreement between multiple raters beyond what would be expected by pure chance. A κ of 0 means raters agree only as much as random guessing would predict; κ = 1 means perfect agreement. It accounts for the "base rate" — if 95% of the signal is clean, raters will agree on those parts by default, so Kappa isolates meaningful consensus.</p>
-            <div class="band-row">
-                <span class="band-chip" style="background:#fef2f2;color:#ef4444;">< 0.20 Poor</span>
-                <span class="band-chip" style="background:#fff7ed;color:#f97316;">0.21–0.40 Fair</span>
-                <span class="band-chip" style="background:#fefce8;color:#eab308;">0.41–0.60 Moderate</span>
-                <span class="band-chip" style="background:#f0fdf4;color:#22c55e;">0.61–0.80 Substantial</span>
-                <span class="band-chip" style="background:#ecfdf5;color:#15803d;">0.81–1.00 Almost Perfect</span>
+            <div class="band-row" style="flex-wrap:wrap;">
+                <span class="band-chip" style="background:#ecfdf5;color:#15803d;">≥.95 A+</span>
+                <span class="band-chip" style="background:#f0fdf4;color:#16a34a;">≥.90 A</span>
+                <span class="band-chip" style="background:#f0fdf4;color:#22c55e;">≥.85 A-</span>
+                <span class="band-chip" style="background:#f7fee7;color:#65a30d;">≥.80 B+</span>
+                <span class="band-chip" style="background:#fefce8;color:#ca8a04;">≥.75 B</span>
+                <span class="band-chip" style="background:#fefce8;color:#eab308;">≥.70 B-</span>
+                <span class="band-chip" style="background:#fff7ed;color:#f59e0b;">≥.65 C+</span>
+                <span class="band-chip" style="background:#fff7ed;color:#f97316;">≥.60 C</span>
+                <span class="band-chip" style="background:#fff7ed;color:#ea580c;">≥.55 C-</span>
+                <span class="band-chip" style="background:#fef2f2;color:#dc2626;">≥.50 D+</span>
+                <span class="band-chip" style="background:#fef2f2;color:#b91c1c;">≥.45 D</span>
+                <span class="band-chip" style="background:#fef2f2;color:#991b1b;">≥.40 D-</span>
+                <span class="band-chip" style="background:#fef2f2;color:#7f1d1d;">< .40 F</span>
             </div>
             <p><strong>Strict IoU (Intersection over Union)</strong> measures how much the flagged time regions physically overlap across all reviewer pairs. Intersection = seconds flagged by both; Union = seconds flagged by either. 100% means all reviewers flagged exactly the same time windows; 0% means no overlap at all.</p>
             <p style="margin-top:8px;"><strong>Tolerant IoU (±5s)</strong> applies a 5-second boundary dilation before computing overlap. This accounts for the inherent imprecision of manually selecting trim boundaries — two reviewers may identify the same bad region but disagree on the exact start/end by a few seconds. The tolerance captures "same intent, slightly different boundaries."</p>
