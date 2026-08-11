@@ -653,7 +653,7 @@ function renderStudyChart(containerId, sm) {
     const traces = [];
     // Polar trace
     const polarTs = study.polar.ts.map(t => (new Date(t).getTime() - startMs) / 1000);
-    traces.push({ x: polarTs, y: study.polar.hr, type: 'scatter', mode: 'lines', name: 'Polar H10', line: { color: '#1a1a2e', width: 2 } });
+    traces.push({ x: polarTs, y: study.polar.hr, type: 'scatter', mode: 'lines', name: 'Polar H10', line: { color: '#1a1a2e', width: 2 }, showlegend: false });
 
     // WHOOP traces
     if (study.whoop) {
@@ -661,7 +661,7 @@ function renderStudyChart(containerId, sm) {
         whoopKeys.forEach((key, wi) => {
             const wd = study.whoop[key];
             const wTs = wd.ts.map(t => (new Date(t).getTime() - startMs) / 1000);
-            traces.push({ x: wTs, y: wd.hr, type: 'scatter', mode: 'lines', name: `WHOOP ${wi + 1}`, line: { color: '#9ca3af', width: 1, dash: 'dot' } });
+            traces.push({ x: wTs, y: wd.hr, type: 'scatter', mode: 'lines', name: `WHOOP ${wi + 1}`, line: { color: '#9ca3af', width: 1, dash: 'dot' }, showlegend: false });
         });
     }
 
