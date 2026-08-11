@@ -125,6 +125,8 @@ function thresholdTab(view) {
         const tab = document.getElementById('thresh_tab_' + v);
         tab.style.background = v === view ? '#fff' : 'transparent';
         tab.style.color = v === view ? '#374151' : '#6b7280';
+        const bullets = document.getElementById('thresh_bullets_' + v);
+        if (bullets) bullets.style.display = v === view ? '' : 'none';
     });
 }
 
@@ -902,12 +904,24 @@ function computeReport() {
                 <div style="font-size:13px; line-height:1.8; margin-bottom:16px;">
                     <strong>Pairwise Threshold Agreement: ${pairwiseAgreement}%</strong> — when any two reviewers look at the same signal event, they agree on whether it needs trimming ${pairwiseAgreement}% of the time.
                 </div>
-                <ul style="font-size:13px; line-height:1.8; padding-left:20px; color:#374151; margin-bottom:16px;">
+                <ul id="thresh_bullets_balanced" style="font-size:13px; line-height:1.8; padding-left:20px; color:#374151; margin-bottom:16px;">
                     <li><strong>${totalEvt} distinct signal events</strong> identified across ${studyIds.length} studies (15s merge tolerance).</li>
                     <li><strong>${(high.length/totalEvt*100).toFixed(0)}% of events</strong> have high agreement (6-7 reviewers) — unambiguous trims.</li>
                     <li><strong>${(moderate.length/totalEvt*100).toFixed(0)}% have moderate agreement</strong> (4-5 reviewers) — majority says trim but notable dissent.</li>
                     <li><strong>${(low.length/totalEvt*100).toFixed(0)}% have low agreement</strong> (2-3 reviewers) — primary calibration targets.</li>
                     <li><strong>${(solo.length/totalEvt*100).toFixed(0)}% are solo flags</strong> — one reviewer's threshold differs from the group.</li>
+                </ul>
+                <ul id="thresh_bullets_consensus" style="display:none; font-size:13px; line-height:1.8; padding-left:20px; color:#374151; margin-bottom:16px;">
+                    <li><strong>${totalEvt} distinct signal events</strong> identified across ${studyIds.length} studies (15s merge tolerance).</li>
+                    <li><strong>${allEvents.filter(e => e.nFlagged >= 5).length} events (${(allEvents.filter(e => e.nFlagged >= 5).length/totalEvt*100).toFixed(0)}%)</strong> reach consensus — 5 or more reviewers agree it should be trimmed.</li>
+                    <li><strong>${allEvents.filter(e => e.nFlagged <= 4).length} events (${(allEvents.filter(e => e.nFlagged <= 4).length/totalEvt*100).toFixed(0)}%)</strong> lack consensus — fewer than 5 reviewers flag them, meaning the group does not clearly agree these are bad signal.</li>
+                    <li><strong>${(allEvents.filter(e => e.nFlagged >= 5).reduce((s,e)=>s+e.duration,0)/60).toFixed(0)} min</strong> of signal time has consensus for trimming vs <strong>${(allEvents.filter(e => e.nFlagged <= 4).reduce((s,e)=>s+e.duration,0)/60).toFixed(0)} min</strong> without.</li>
+                </ul>
+                <ul id="thresh_bullets_majority" style="display:none; font-size:13px; line-height:1.8; padding-left:20px; color:#374151; margin-bottom:16px;">
+                    <li><strong>${totalEvt} distinct signal events</strong> identified across ${studyIds.length} studies (15s merge tolerance).</li>
+                    <li><strong>${allEvents.filter(e => e.nFlagged >= 4).length} events (${(allEvents.filter(e => e.nFlagged >= 4).length/totalEvt*100).toFixed(0)}%)</strong> would be trimmed by majority vote (4+ of 7 flag).</li>
+                    <li><strong>${allEvents.filter(e => e.nFlagged <= 3).length} events (${(allEvents.filter(e => e.nFlagged <= 3).length/totalEvt*100).toFixed(0)}%)</strong> would be kept — fewer than half of reviewers flag them.</li>
+                    <li><strong>${(allEvents.filter(e => e.nFlagged >= 4).reduce((s,e)=>s+e.duration,0)/60).toFixed(0)} min</strong> would be trimmed vs <strong>${(allEvents.filter(e => e.nFlagged <= 3).reduce((s,e)=>s+e.duration,0)/60).toFixed(0)} min</strong> kept.</li>
                 </ul>
                 <details style="margin-bottom:12px;">
                     <summary style="cursor:pointer; font-size:12px; font-weight:600; color:#374151;">Per-Reviewer Low/Solo Rate</summary>
