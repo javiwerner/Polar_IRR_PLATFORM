@@ -483,14 +483,16 @@ function computeReport() {
 
     // --- PAIRWISE AGREEMENT ---
     html += `<div class="section" id="pairwise">
-        <h2>Pairwise Agreement</h2>
-        <table>
-            <tr><th>Pair</th><th style="text-align:right;">IoU</th><th style="text-align:right;">Level</th></tr>
-            ${pairResults.map(p => {
-                const band = getAgreementBand(p.iou);
-                return `<tr><td>${p.a} vs ${p.b}</td><td style="text-align:right;">${(p.iou * 100).toFixed(1)}%</td><td style="text-align:right;color:${band.color};font-weight:500;">${band.label}</td></tr>`;
-            }).join('')}
-        </table>
+        <details class="collapse-section">
+            <summary>Pairwise Agreement <span style="font-weight:400; color:#6b7280;">(${pairResults.length} pairs)</span></summary>
+            <table style="margin-top:10px;">
+                <tr><th>Pair</th><th style="text-align:right;">IoU</th><th style="text-align:right;">Level</th></tr>
+                ${pairResults.map(p => {
+                    const band = getAgreementBand(p.iou);
+                    return `<tr><td>${p.a} vs ${p.b}</td><td style="text-align:right;">${(p.iou * 100).toFixed(1)}%</td><td style="text-align:right;color:${band.color};font-weight:500;">${band.label}</td></tr>`;
+                }).join('')}
+            </table>
+        </details>
     </div>`;
 
     // --- REVIEWER COMPARISON ---
