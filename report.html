@@ -599,6 +599,68 @@ function computeReport() {
             </ul>
         </div>
 
+        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px; margin-bottom:16px;">
+            <h3 style="color:#1f2937; margin-bottom:10px;">Boundary Precision Analysis</h3>
+            <p style="font-size:13px; color:#374151; line-height:1.7; margin-bottom:12px;">
+                The ±5s tolerant IoU (${(tolerantIoU * 100).toFixed(1)}%) improves over strict IoU (${(overallIoU * 100).toFixed(1)}%) by only <strong>${(tolerantIoU * 100 - overallIoU * 100).toFixed(2)} percentage points</strong>. This near-zero gap reveals a critical insight about the nature of reviewer disagreement:
+            </p>
+            ${(() => {
+                // Compute trim duration distribution
+                const allDurs = [];
+                reviewers.forEach(r => {
+                    studyIds.forEach(sid => {
+                        (irrData[r][sid] || []).forEach(t => {
+                            allDurs.push((new Date(t.end).getTime() - new Date(t.start).getTime()) / 1000);
+                        });
+                    });
+                });
+                allDurs.sort((a, b) => a - b);
+                const n = allDurs.length;
+                const median = allDurs[Math.floor(n/2)];
+                const p25 = allDurs[Math.floor(n*0.25)];
+                const p75 = allDurs[Math.floor(n*0.75)];
+                const shortTrims = allDurs.filter(d => d < 10).length;
+                const longTrims = allDurs.filter(d => d > 120).length;
+                
+                // Per-study tolerance gain
+                const studyGains = studyMetrics.map(sm => {
+                    let sStrict = 0, sStrictUni = 0, sTol = 0, sTolUni = 0;
+                    for (let a = 0; a < reviewers.length; a++) {
+                        for (let b = a + 1; b < reviewers.length; b++) {
+                            const bA = getSecondBins(irrData[reviewers[a]][sm.sid], STUDIES[sm.sid]);
+                            const bB = getSecondBins(irrData[reviewers[b]][sm.sid], STUDIES[sm.sid]);
+                            const L = Math.min(bA.length, bB.length);
+                            const dA = new Array(L).fill(0), dB = new Array(L).fill(0);
+                            for (let i = 0; i < L; i++) {
+                                if (bA[i] || bB[i]) sStrictUni++;
+                                if (bA[i] && bB[i]) sStrict++;
+                                if (bA[i]) for (let d = Math.max(0,i-5); d < Math.min(L,i+6); d++) dA[d]=1;
+                                if (bB[i]) for (let d = Math.max(0,i-5); d < Math.min(L,i+6); d++) dB[d]=1;
+                            }
+                            for (let i = 0; i < L; i++) {
+                                if (dA[i] || dB[i]) sTolUni++;
+                                if (dA[i] && dB[i]) sTol++;
+                            }
+                        }
+                    }
+                    const strict = sStrictUni > 0 ? sStrict/sStrictUni : 1;
+                    const tol = sTolUni > 0 ? sTol/sTolUni : 1;
+                    return { sid: sm.sid, gain: (tol - strict) * 100 };
+                }).filter(g => g.gain > 0).sort((a,b) => b.gain - a.gain);
+                
+                const gainsUnder1 = studyGains.filter(g => g.gain < 1).length + (studyMetrics.length - studyGains.length);
+                
+                return `<ul style="font-size:13px; line-height:1.8; padding-left:20px; color:#374151;">
+                    <li><strong>Why tolerance barely helps:</strong> The median trim duration is <strong>${Math.round(median)}s</strong> (~${(median/60).toFixed(1)} min). When flagged regions are this long, a ±5s boundary expansion adds negligible area to the union.</li>
+                    <li><strong>Trim duration distribution:</strong> P25 = ${Math.round(p25)}s, Median = ${Math.round(median)}s, P75 = ${Math.round(p75)}s. Only ${shortTrims} of ${n} trims (${(shortTrims/n*100).toFixed(1)}%) are under 10s where tolerance would meaningfully help.</li>
+                    <li><strong>${longTrims} of ${n} trims (${(longTrims/n*100).toFixed(1)}%)</strong> are over 2 minutes — these are large contiguous bad-signal regions where boundary precision is irrelevant.</li>
+                    <li><strong>${gainsUnder1} of ${studyIds.length} studies</strong> gained less than 1 percentage point from the tolerance window.</li>
+                    <li><strong>Interpretation:</strong> Disagreement is almost entirely about <em>whether</em> to flag a region, not <em>where</em> boundaries fall. When reviewers agree something is bad signal, they mark essentially the same time window. The challenge is calibrating the <em>threshold</em> for what qualifies as bad signal.</li>
+                    <li><strong>Implication for protocol:</strong> Boundary guidance (e.g., "start/end within ±5s") is already well-understood. Future calibration efforts should focus on exemplar studies that define the <em>severity threshold</em> — what level of artifact warrants flagging.</li>
+                </ul>`;
+            })()}
+        </div>
+
         <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px;">
             <h3 style="color:#1f2937; margin-bottom:10px;">Recommendations</h3>
             <ul style="font-size:13px; line-height:1.8; padding-left:20px; color:#374151;">
