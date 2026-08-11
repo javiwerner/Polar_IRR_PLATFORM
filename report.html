@@ -409,10 +409,10 @@ function computeReport() {
             </div>
         </div>
         <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:1px; background:${thresholdBand.color}20;">
-            <div style="background:#fff; padding:10px 8px; text-align:center;"><div style="font-size:16px; font-weight:700; color:#1a1a2e;">${reviewers.length}</div><div style="font-size:10px; color:#6b7280;">Reviewers</div></div>
-            <div style="background:#fff; padding:10px 8px; text-align:center;"><div style="font-size:16px; font-weight:700; color:#1a1a2e;">${allEvents.length}</div><div style="font-size:10px; color:#6b7280;">Signal Events</div></div>
-            <div style="background:#fff; padding:10px 8px; text-align:center;"><div style="font-size:16px; font-weight:700; color:#15803d;">${allEvents.filter(e => e.nFlagged >= 5).length}</div><div style="font-size:10px; color:#6b7280;">Clear Consensus</div></div>
-            <div style="background:#fff; padding:10px 8px; text-align:center;"><div style="font-size:16px; font-weight:700; color:#ca8a04;">${allEvents.filter(e => e.nFlagged >= 2 && e.nFlagged <= 4).length}</div><div style="font-size:10px; color:#6b7280;">Gray Zone</div></div>
+            <div style="background:#fff; padding:10px 8px; text-align:center;"><div style="font-size:16px; font-weight:700; color:#dc2626;">${allEvents.filter(e => e.nFlagged === 1).length}</div><div style="font-size:10px; color:#6b7280;">Solo (1)</div></div>
+            <div style="background:#fff; padding:10px 8px; text-align:center;"><div style="font-size:16px; font-weight:700; color:#ca8a04;">${allEvents.filter(e => e.nFlagged >= 2 && e.nFlagged <= 3).length}</div><div style="font-size:10px; color:#6b7280;">Low (2-3)</div></div>
+            <div style="background:#fff; padding:10px 8px; text-align:center;"><div style="font-size:16px; font-weight:700; color:#65a30d;">${allEvents.filter(e => e.nFlagged >= 4 && e.nFlagged <= 5).length}</div><div style="font-size:10px; color:#6b7280;">Moderate (4-5)</div></div>
+            <div style="background:#fff; padding:10px 8px; text-align:center;"><div style="font-size:16px; font-weight:700; color:#15803d;">${allEvents.filter(e => e.nFlagged >= 6).length}</div><div style="font-size:10px; color:#6b7280;">High (6-7)</div></div>
         </div>
     </div>`;
 
@@ -421,7 +421,7 @@ function computeReport() {
         <summary>Understanding These Metrics</summary>
         <div class="content">
             <p><strong>Pairwise Threshold Agreement</strong> measures how often any two reviewers agree on whether a signal event needs trimming. All reviewer trims are merged into distinct signal events (15s gap tolerance), then for each event, every pair of reviewers is checked: did they both flag it, or both skip it? The percentage reflects raw agreement with no chance correction — appropriate because these are trained reviewers making deliberate decisions from visual evidence, not random guesses.</p>
-            <p style="margin-top:8px;"><strong>Event Classification:</strong> "Clear Consensus" = 5+ of 7 reviewers flag the event (unambiguous trim). "Gray Zone" = 2-4 reviewers flag it (threshold calibration needed). "Solo" = only 1 reviewer flags it.</p>
+            <p style="margin-top:8px;"><strong>Event Classification:</strong> "High" = 6-7 of 7 reviewers flag (unambiguous trim). "Moderate" = 4-5 flag (majority but notable dissent). "Low" = 2-3 flag (calibration target). "Solo" = 1 reviewer flags.</p>
             <p style="margin-top:8px;"><strong>Fleiss' Kappa (κ = ${kappa.toFixed(3)})</strong> is included for reference. It applies a chance correction which assumes some agreement is random — this penalizes agreement on clean signal (which is correct observation, not luck). For this reason, the threshold agreement is the primary metric.</p>
             <div class="band-row" style="flex-wrap:wrap;">
                 <span class="band-chip" style="background:#ecfdf5;color:#15803d;">≥.95 A+</span>
@@ -756,8 +756,9 @@ function computeReport() {
                     });
                 });
 
-                const clearYes = allEvents.filter(e => e.nFlagged >= 5);
-                const grayZone = allEvents.filter(e => e.nFlagged >= 2 && e.nFlagged <= 4);
+                const high = allEvents.filter(e => e.nFlagged >= 6);
+                const moderate = allEvents.filter(e => e.nFlagged >= 4 && e.nFlagged <= 5);
+                const low = allEvents.filter(e => e.nFlagged >= 2 && e.nFlagged <= 3);
                 const solo = allEvents.filter(e => e.nFlagged === 1);
                 const totalEvt = allEvents.length;
                 const totalTime = allEvents.reduce((s, e) => s + e.duration, 0);
@@ -774,35 +775,41 @@ function computeReport() {
                 });
                 const pairwiseAgreement = (agreeingPairs / totalPairs * 100).toFixed(1);
 
-                // Per-reviewer minority rate
+                // Per-reviewer: how often they flag in solo/low bucket
                 const reviewerMinority = reviewers.map((r, ri) => {
                     const flagged = allEvents.filter(e => e.flags[ri]);
-                    const inMinority = flagged.filter(e => e.nFlagged <= 2);
-                    return { name: r, total: flagged.length, minority: inMinority.length, rate: flagged.length > 0 ? (inMinority.length / flagged.length * 100).toFixed(0) : '0' };
+                    const inLow = flagged.filter(e => e.nFlagged <= 3);
+                    return { name: r, total: flagged.length, minority: inLow.length, rate: flagged.length > 0 ? (inLow.length / flagged.length * 100).toFixed(0) : '0' };
                 });
 
-                // Gray zone event list (top by duration)
-                const topGray = grayZone.sort((a, b) => b.duration - a.duration).slice(0, 10);
+                // Low/moderate zone events (top by duration) — calibration targets
+                const calibrationTargets = [...low, ...moderate].sort((a, b) => b.duration - a.duration).slice(0, 10);
 
                 return `
-                <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-bottom:16px;">
-                    <div style="text-align:center; padding:14px; background:#ecfdf5; border-radius:8px;">
-                        <div style="font-size:20px; font-weight:800; color:#15803d;">${clearYes.length}</div>
-                        <div style="font-size:11px; color:#15803d; font-weight:600;">Clear YES</div>
-                        <div style="font-size:10px; color:#6b7280;">(5+ of 7 flag)</div>
-                        <div style="font-size:10px; color:#6b7280;">${(clearYes.reduce((s,e)=>s+e.duration,0)/60).toFixed(0)} min</div>
-                    </div>
-                    <div style="text-align:center; padding:14px; background:#fefce8; border-radius:8px;">
-                        <div style="font-size:20px; font-weight:800; color:#ca8a04;">${grayZone.length}</div>
-                        <div style="font-size:11px; color:#ca8a04; font-weight:600;">Gray Zone</div>
-                        <div style="font-size:10px; color:#6b7280;">(2-4 of 7 flag)</div>
-                        <div style="font-size:10px; color:#6b7280;">${(grayZone.reduce((s,e)=>s+e.duration,0)/60).toFixed(0)} min</div>
-                    </div>
+                <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:16px;">
                     <div style="text-align:center; padding:14px; background:#fef2f2; border-radius:8px;">
                         <div style="font-size:20px; font-weight:800; color:#dc2626;">${solo.length}</div>
                         <div style="font-size:11px; color:#dc2626; font-weight:600;">Solo</div>
-                        <div style="font-size:10px; color:#6b7280;">(1 of 7 flags)</div>
+                        <div style="font-size:10px; color:#6b7280;">1 of 7</div>
                         <div style="font-size:10px; color:#6b7280;">${(solo.reduce((s,e)=>s+e.duration,0)/60).toFixed(0)} min</div>
+                    </div>
+                    <div style="text-align:center; padding:14px; background:#fefce8; border-radius:8px;">
+                        <div style="font-size:20px; font-weight:800; color:#ca8a04;">${low.length}</div>
+                        <div style="font-size:11px; color:#ca8a04; font-weight:600;">Low</div>
+                        <div style="font-size:10px; color:#6b7280;">2-3 of 7</div>
+                        <div style="font-size:10px; color:#6b7280;">${(low.reduce((s,e)=>s+e.duration,0)/60).toFixed(0)} min</div>
+                    </div>
+                    <div style="text-align:center; padding:14px; background:#f7fee7; border-radius:8px;">
+                        <div style="font-size:20px; font-weight:800; color:#65a30d;">${moderate.length}</div>
+                        <div style="font-size:11px; color:#65a30d; font-weight:600;">Moderate</div>
+                        <div style="font-size:10px; color:#6b7280;">4-5 of 7</div>
+                        <div style="font-size:10px; color:#6b7280;">${(moderate.reduce((s,e)=>s+e.duration,0)/60).toFixed(0)} min</div>
+                    </div>
+                    <div style="text-align:center; padding:14px; background:#ecfdf5; border-radius:8px;">
+                        <div style="font-size:20px; font-weight:800; color:#15803d;">${high.length}</div>
+                        <div style="font-size:11px; color:#15803d; font-weight:600;">High</div>
+                        <div style="font-size:10px; color:#6b7280;">6-7 of 7</div>
+                        <div style="font-size:10px; color:#6b7280;">${(high.reduce((s,e)=>s+e.duration,0)/60).toFixed(0)} min</div>
                     </div>
                 </div>
                 <div style="font-size:13px; line-height:1.8; margin-bottom:16px;">
@@ -810,22 +817,23 @@ function computeReport() {
                 </div>
                 <ul style="font-size:13px; line-height:1.8; padding-left:20px; color:#374151; margin-bottom:16px;">
                     <li><strong>${totalEvt} distinct signal events</strong> identified across ${studyIds.length} studies (15s merge tolerance).</li>
-                    <li><strong>${(clearYes.length/totalEvt*100).toFixed(0)}% of events</strong> have clear consensus (5+ reviewers) — these are unambiguous trims.</li>
-                    <li><strong>${(grayZone.length/totalEvt*100).toFixed(0)}% of events are in the gray zone</strong> (2-4 reviewers flag) — these are the calibration targets where reviewers disagree on whether the artifact severity warrants trimming.</li>
-                    <li><strong>${(solo.length/totalEvt*100).toFixed(0)}% are solo flags</strong> — one reviewer's threshold differs from the group on these regions.</li>
+                    <li><strong>${(high.length/totalEvt*100).toFixed(0)}% of events</strong> have high agreement (6-7 reviewers) — unambiguous trims.</li>
+                    <li><strong>${(moderate.length/totalEvt*100).toFixed(0)}% have moderate agreement</strong> (4-5 reviewers) — majority says trim but notable dissent.</li>
+                    <li><strong>${(low.length/totalEvt*100).toFixed(0)}% have low agreement</strong> (2-3 reviewers) — primary calibration targets.</li>
+                    <li><strong>${(solo.length/totalEvt*100).toFixed(0)}% are solo flags</strong> — one reviewer's threshold differs from the group.</li>
                 </ul>
                 <details style="margin-bottom:12px;">
-                    <summary style="cursor:pointer; font-size:12px; font-weight:600; color:#374151;">Per-Reviewer Minority Flag Rate</summary>
+                    <summary style="cursor:pointer; font-size:12px; font-weight:600; color:#374151;">Per-Reviewer Low/Solo Rate</summary>
                     <table style="width:100%; font-size:12px; margin-top:8px; border-collapse:collapse;">
-                        <tr style="border-bottom:1px solid #e5e7eb;"><th style="text-align:left;padding:4px;">Reviewer</th><th style="text-align:right;padding:4px;">Events Flagged</th><th style="text-align:right;padding:4px;">In Minority (≤2)</th><th style="text-align:right;padding:4px;">Minority Rate</th></tr>
+                        <tr style="border-bottom:1px solid #e5e7eb;"><th style="text-align:left;padding:4px;">Reviewer</th><th style="text-align:right;padding:4px;">Events Flagged</th><th style="text-align:right;padding:4px;">In Solo/Low (≤3)</th><th style="text-align:right;padding:4px;">Rate</th></tr>
                         ${reviewerMinority.map(rm => `<tr style="border-bottom:1px solid #f3f4f6;"><td style="padding:4px;">${rm.name}</td><td style="text-align:right;padding:4px;">${rm.total}</td><td style="text-align:right;padding:4px;">${rm.minority}</td><td style="text-align:right;padding:4px;">${rm.rate}%</td></tr>`).join('')}
                     </table>
                 </details>
                 <details>
-                    <summary style="cursor:pointer; font-size:12px; font-weight:600; color:#374151;">Top Gray Zone Events (calibration targets)</summary>
+                    <summary style="cursor:pointer; font-size:12px; font-weight:600; color:#374151;">Top Calibration Targets (Solo + Low + Moderate events)</summary>
                     <table style="width:100%; font-size:11px; margin-top:8px; border-collapse:collapse;">
                         <tr style="border-bottom:1px solid #e5e7eb;"><th style="text-align:left;padding:4px;">Study</th><th style="text-align:right;padding:4px;">Time</th><th style="text-align:right;padding:4px;">Duration</th><th style="text-align:left;padding:4px 4px 4px 12px;">Flagged By</th><th style="text-align:left;padding:4px;">Not Flagged By</th></tr>
-                        ${topGray.map(e => {
+                        ${calibrationTargets.map(e => {
                             const yes = reviewers.filter((r,i) => e.flags[i]).map(r => r.replace('Reviewer ','R')).join(', ');
                             const no = reviewers.filter((r,i) => !e.flags[i]).map(r => r.replace('Reviewer ','R')).join(', ');
                             const fmtT = (s) => Math.floor(s/60) + ':' + String(Math.floor(s%60)).padStart(2,'0');
