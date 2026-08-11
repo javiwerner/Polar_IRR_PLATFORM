@@ -947,14 +947,16 @@ function computeReport() {
         </div>
 
         <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px;">
-            <h3 style="color:#1f2937; margin-bottom:10px;">Recommendations</h3>
-            <ul style="font-size:13px; line-height:1.8; padding-left:20px; color:#374151;">
-                <li><strong>Adjudication needed:</strong> The ${zeroIoUStudies} studies with 0% IoU should undergo a consensus review session where reviewers discuss their rationale to establish ground truth.</li>
-                <li><strong>High-confidence exclusions:</strong> Studies where all ${reviewers.length} reviewers flagged regions with IoU ≥ 40% can be confidently marked for signal exclusion (${highConfidenceExclude} studies qualify).</li>
-                <li><strong>Protocol refinement:</strong> The ${(tolerantIoU * 100 - overallIoU * 100).toFixed(1)} percentage-point gain from ±5s tolerance suggests boundary imprecision is a small factor — disagreements are mostly about <em>whether</em> to flag, not <em>where</em> boundaries are.</li>
-                <li><strong>Reviewer calibration:</strong> Consider a calibration session for reviewers with flag rates significantly above/below the ${(avgFlagRate * 100).toFixed(1)}% group mean to align thresholds.</li>
-                <li><strong>Dominant failure mode:</strong> "${activeThemes.length > 0 ? activeThemes[0].canonical : 'N/A'}" accounts for the plurality of flags — establishing explicit decision rules for this category could improve future agreement.</li>
-            </ul>
+            <h3 style="color:#1f2937; margin-bottom:10px;">Priorities</h3>
+            <p style="font-size:13px; color:#374151; line-height:1.7; margin-bottom:14px;">The data tells a clear story: reviewers agree on <em>where</em> bad signal is (boundary precision is near-perfect), but disagree on <em>whether</em> it's bad enough to trim (threshold calibration is the gap). Priorities should follow accordingly:</p>
+            <ol style="font-size:13px; line-height:2; padding-left:20px; color:#374151;">
+                <li><strong style="color:#dc2626;">Threshold Calibration Session</strong> — The #1 priority. ${allEvents.filter(e => e.nFlagged >= 2 && e.nFlagged <= 4).length} events (${(allEvents.filter(e => e.nFlagged >= 2 && e.nFlagged <= 4).length/allEvents.length*100).toFixed(0)}% of all events) sit in the gray zone where 2-4 of 7 reviewers flag them. Use these as calibration material: have reviewers discuss the specific events listed above and establish explicit severity thresholds for what warrants trimming.</li>
+                <li><strong style="color:#d97706;">Reviewer Alignment</strong> — Flag rate spread ranges from ${(Math.min(...reviewerStats.map(r => r.flaggedSec / r.totalSec)) * 100).toFixed(1)}% to ${(Math.max(...reviewerStats.map(r => r.flaggedSec / r.totalSec)) * 100).toFixed(1)}% (${(Math.max(...reviewerStats.map(r => r.flaggedSec / r.totalSec)) / Math.min(...reviewerStats.map(r => r.flaggedSec / r.totalSec))).toFixed(1)}x spread). Reviewers with high solo/low rates are applying a different bar — align them to the group's threshold via exemplar review.</li>
+                <li><strong style="color:#ca8a04;">Decision Rules for "${activeThemes.length > 0 ? activeThemes[0].canonical : 'N/A'}"</strong> — The most common flag reason (${activeThemes.length > 0 ? activeThemes[0].count : 0} occurrences). Establishing explicit criteria for this failure mode (how severe? how long? which HR deviation?) would reduce ambiguity on future reviews.</li>
+                <li><strong style="color:#059669;">High-Confidence Exclusions</strong> — ${highConfidenceExclude} studies have all ${reviewers.length} reviewers flagging regions with IoU ≥ 40%. These can be confidently marked for signal exclusion today without further discussion.</li>
+                <li><strong style="color:#2563eb;">Adjudication for 0% IoU Studies</strong> — ${zeroIoUStudies} studies have complete disagreement. These need a focused review where flagging reviewers explain their rationale to determine if signal was genuinely bad or if thresholds differed.</li>
+            </ol>
+            <p style="font-size:12px; color:#6b7280; margin-top:14px; font-style:italic;"><strong>Not a priority:</strong> Boundary training. The ${(tolerantIoU * 100 - overallIoU * 100).toFixed(2)}pp tolerance gap proves reviewers already agree precisely on where artifacts start and end. Time spent on boundary guidance would not improve agreement.</p>
         </div>
     </div>`;
 
