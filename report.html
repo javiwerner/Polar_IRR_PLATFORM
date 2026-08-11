@@ -331,6 +331,56 @@ function computeReport() {
     const activeThemes = themeCounts.filter(t => t.count > 0).sort((a, b) => b.count - a.count);
 
     // ================================================================
+    // EVENT-LEVEL THRESHOLD AGREEMENT (lead metric)
+    // ================================================================
+    const GAP_TOL = 15;
+    const allEvents = [];
+    studyIds.forEach(sid => {
+        const study = STUDIES[sid];
+        const startMs2 = new Date(study.polar.ts[0]).getTime();
+        const dur2 = Math.ceil((new Date(study.polar.ts[study.polar.ts.length-1]).getTime() - startMs2) / 1000);
+        const intervals = [];
+        reviewers.forEach(r => {
+            (irrData[r][sid] || []).forEach(t => {
+                const s = Math.max(0, (new Date(t.start).getTime() - startMs2) / 1000);
+                const e = Math.min(dur2, (new Date(t.end).getTime() - startMs2) / 1000);
+                if (e > s) intervals.push([s, e]);
+            });
+        });
+        if (intervals.length === 0) return;
+        intervals.sort((a, b) => a[0] - b[0]);
+        const merged2 = [[intervals[0][0], intervals[0][1]]];
+        for (let i = 1; i < intervals.length; i++) {
+            if (intervals[i][0] <= merged2[merged2.length-1][1] + GAP_TOL) {
+                merged2[merged2.length-1][1] = Math.max(merged2[merged2.length-1][1], intervals[i][1]);
+            } else {
+                merged2.push([intervals[i][0], intervals[i][1]]);
+            }
+        }
+        merged2.forEach(([es, ee]) => {
+            const flags = reviewers.map(r => {
+                return (irrData[r][sid] || []).some(t => {
+                    const ts = Math.max(0, (new Date(t.start).getTime() - startMs2) / 1000);
+                    const te = Math.min(dur2, (new Date(t.end).getTime() - startMs2) / 1000);
+                    return ts < ee && te > es;
+                });
+            });
+            allEvents.push({ sid, start: es, end: ee, duration: ee - es, nFlagged: flags.filter(Boolean).length, flags });
+        });
+    });
+    let evtPairsTotal = 0, evtPairsAgree = 0;
+    allEvents.forEach(e => {
+        for (let a = 0; a < reviewers.length; a++) {
+            for (let b = a + 1; b < reviewers.length; b++) {
+                evtPairsTotal++;
+                if (e.flags[a] === e.flags[b]) evtPairsAgree++;
+            }
+        }
+    });
+    const thresholdAgreement = evtPairsTotal > 0 ? evtPairsAgree / evtPairsTotal : 0;
+    const thresholdBand = getAgreementBand(thresholdAgreement);
+
+    // ================================================================
     // BUILD HTML
     // ================================================================
     let html = '';
@@ -345,24 +395,24 @@ function computeReport() {
         <a class="nav-btn" href="#analysis">Final Analysis</a>
     </nav>`;
 
-    // --- HERO BOX (puzzle layout: verdict left, kappa top-right, stats bottom) ---
-    html += `<div style="border:2px solid ${kappaBand.color}44; border-radius:12px; background:linear-gradient(135deg, ${kappaBand.color}06, ${kappaBand.color}12); overflow:hidden; margin-bottom:24px;">
-        <div style="display:grid; grid-template-columns:1fr auto; gap:1px; background:${kappaBand.color}20;">
-            <div style="background:linear-gradient(135deg, ${kappaBand.color}04, ${kappaBand.color}10); padding:14px 20px; display:flex; flex-direction:column; justify-content:center;">
+    // --- HERO BOX (puzzle layout: verdict left, threshold agreement top-right, stats bottom) ---
+    html += `<div style="border:2px solid ${thresholdBand.color}44; border-radius:12px; background:linear-gradient(135deg, ${thresholdBand.color}06, ${thresholdBand.color}12); overflow:hidden; margin-bottom:24px;">
+        <div style="display:grid; grid-template-columns:1fr auto; gap:1px; background:${thresholdBand.color}20;">
+            <div style="background:linear-gradient(135deg, ${thresholdBand.color}04, ${thresholdBand.color}10); padding:14px 20px; display:flex; flex-direction:column; justify-content:center;">
                 <div style="font-size:11px; font-weight:500; color:#6b7280;">Overall Reviewer Agreement</div>
-                <div style="font-size:22px; font-weight:800; color:${kappaBand.color}; margin:2px 0;">${kappaBand.label}</div>
-                <div style="font-size:11px; color:#6b7280;">Fleiss' Kappa — chance-corrected across ${reviewers.length} reviewers, ${studyIds.length} studies</div>
+                <div style="font-size:22px; font-weight:800; color:${thresholdBand.color}; margin:2px 0;">${thresholdBand.label}</div>
+                <div style="font-size:11px; color:#6b7280;">Pairwise Threshold Agreement — ${reviewers.length} reviewers, ${studyIds.length} studies, ${allEvents.length} signal events</div>
             </div>
             <div style="background:#fff; padding:14px 24px; display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:100px;">
-                <div style="font-size:10px; font-weight:500; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px;">Kappa</div>
-                <div style="font-size:24px; font-weight:800; color:${kappaBand.color};">${kappa.toFixed(3)}</div>
+                <div style="font-size:10px; font-weight:500; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px;">Agreement</div>
+                <div style="font-size:24px; font-weight:800; color:${thresholdBand.color};">${(thresholdAgreement * 100).toFixed(1)}%</div>
             </div>
         </div>
-        <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:1px; background:${kappaBand.color}20;">
+        <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:1px; background:${thresholdBand.color}20;">
             <div style="background:#fff; padding:10px 8px; text-align:center;"><div style="font-size:16px; font-weight:700; color:#1a1a2e;">${reviewers.length}</div><div style="font-size:10px; color:#6b7280;">Reviewers</div></div>
-            <div style="background:#fff; padding:10px 8px; text-align:center;"><div style="font-size:16px; font-weight:700; color:#1a1a2e;">${totalRegions}</div><div style="font-size:10px; color:#6b7280;">Flagged Regions</div></div>
-            <div style="background:#fff; padding:10px 8px; text-align:center;"><div style="font-size:16px; font-weight:700; color:${iouBand.color};">${(overallIoU * 100).toFixed(1)}%</div><div style="font-size:10px; color:#6b7280;">Strict IoU</div></div>
-            <div style="background:#fff; padding:10px 8px; text-align:center;"><div style="font-size:16px; font-weight:700; color:${getAgreementBand(tolerantIoU).color};">${(tolerantIoU * 100).toFixed(1)}%</div><div style="font-size:10px; color:#6b7280;">IoU ±5s</div></div>
+            <div style="background:#fff; padding:10px 8px; text-align:center;"><div style="font-size:16px; font-weight:700; color:#1a1a2e;">${allEvents.length}</div><div style="font-size:10px; color:#6b7280;">Signal Events</div></div>
+            <div style="background:#fff; padding:10px 8px; text-align:center;"><div style="font-size:16px; font-weight:700; color:#15803d;">${allEvents.filter(e => e.nFlagged >= 5).length}</div><div style="font-size:10px; color:#6b7280;">Clear Consensus</div></div>
+            <div style="background:#fff; padding:10px 8px; text-align:center;"><div style="font-size:16px; font-weight:700; color:#ca8a04;">${allEvents.filter(e => e.nFlagged >= 2 && e.nFlagged <= 4).length}</div><div style="font-size:10px; color:#6b7280;">Gray Zone</div></div>
         </div>
     </div>`;
 
@@ -370,7 +420,9 @@ function computeReport() {
     html += `<details class="metric-key">
         <summary>Understanding These Metrics</summary>
         <div class="content">
-            <p><strong>Fleiss' Kappa (κ)</strong> measures the degree of agreement between multiple raters beyond what would be expected by pure chance. A κ of 0 means raters agree only as much as random guessing would predict; κ = 1 means perfect agreement. It accounts for the "base rate" — if 95% of the signal is clean, raters will agree on those parts by default, so Kappa isolates meaningful consensus.</p>
+            <p><strong>Pairwise Threshold Agreement</strong> measures how often any two reviewers agree on whether a signal event needs trimming. All reviewer trims are merged into distinct signal events (15s gap tolerance), then for each event, every pair of reviewers is checked: did they both flag it, or both skip it? The percentage reflects raw agreement with no chance correction — appropriate because these are trained reviewers making deliberate decisions from visual evidence, not random guesses.</p>
+            <p style="margin-top:8px;"><strong>Event Classification:</strong> "Clear Consensus" = 5+ of 7 reviewers flag the event (unambiguous trim). "Gray Zone" = 2-4 reviewers flag it (threshold calibration needed). "Solo" = only 1 reviewer flags it.</p>
+            <p style="margin-top:8px;"><strong>Fleiss' Kappa (κ = ${kappa.toFixed(3)})</strong> is included for reference. It applies a chance correction which assumes some agreement is random — this penalizes agreement on clean signal (which is correct observation, not luck). For this reason, the threshold agreement is the primary metric.</p>
             <div class="band-row" style="flex-wrap:wrap;">
                 <span class="band-chip" style="background:#ecfdf5;color:#15803d;">≥.95 A+</span>
                 <span class="band-chip" style="background:#f0fdf4;color:#16a34a;">≥.90 A</span>
