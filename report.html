@@ -100,6 +100,15 @@ const THEMES = [
 // HELPERS
 // ============================================================
 function heroTab(view) {
+    const data = window._heroData;
+    if (!data) return;
+    const d = data[view];
+    document.getElementById('hero_subtitle').textContent = d.subtitle;
+    document.getElementById('hero_grade').textContent = d.grade;
+    document.getElementById('hero_grade').style.color = d.color;
+    document.getElementById('hero_metric_label').textContent = d.label;
+    document.getElementById('hero_metric_value').textContent = d.value;
+    document.getElementById('hero_metric_value').style.color = d.color;
     ['balanced', 'consensus', 'majority'].forEach(v => {
         const el = document.getElementById('hero_view_' + v);
         el.style.display = v === view ? (v === 'balanced' ? 'grid' : '') : 'none';
@@ -399,6 +408,16 @@ function computeReport() {
     });
     const thresholdAgreement = evtPairsTotal > 0 ? evtPairsAgree / evtPairsTotal : 0;
     const thresholdBand = getAgreementBand(thresholdAgreement);
+    const consensusRate = allEvents.length > 0 ? allEvents.filter(e => e.nFlagged >= 5).length / allEvents.length : 0;
+    const consensusBand = getAgreementBand(consensusRate);
+    const majorityRate = allEvents.length > 0 ? allEvents.filter(e => e.nFlagged >= 4).length / allEvents.length : 0;
+    const majorityBand = getAgreementBand(majorityRate);
+
+    window._heroData = {
+        balanced: { subtitle: 'Pairwise Threshold Agreement', label: 'Agreement', value: (thresholdAgreement * 100).toFixed(1) + '%', grade: thresholdBand.label, color: thresholdBand.color },
+        consensus: { subtitle: 'Consensus Rate (5+ of 7 flag)', label: 'Consensus', value: (consensusRate * 100).toFixed(1) + '%', grade: consensusBand.label, color: consensusBand.color },
+        majority: { subtitle: 'Majority Rule (4+ of 7 flag)', label: 'Trim Rate', value: (majorityRate * 100).toFixed(1) + '%', grade: majorityBand.label, color: majorityBand.color }
+    };
 
     // ================================================================
     // BUILD HTML
@@ -415,17 +434,17 @@ function computeReport() {
         <a class="nav-btn" href="#analysis">Final Analysis</a>
     </nav>`;
 
-    // --- HERO BOX (puzzle layout: verdict left, threshold agreement top-right, stats bottom) ---
-    html += `<div style="border:2px solid ${thresholdBand.color}44; border-radius:12px; background:linear-gradient(135deg, ${thresholdBand.color}06, ${thresholdBand.color}12); overflow:hidden; margin-bottom:24px;">
+    // --- HERO BOX (puzzle layout: verdict left, metric top-right, tabbed stats bottom) ---
+    html += `<div id="hero_box" style="border:2px solid ${thresholdBand.color}44; border-radius:12px; background:linear-gradient(135deg, ${thresholdBand.color}06, ${thresholdBand.color}12); overflow:hidden; margin-bottom:24px;">
         <div style="display:grid; grid-template-columns:1fr auto; gap:1px; background:${thresholdBand.color}20;">
             <div style="background:linear-gradient(135deg, ${thresholdBand.color}04, ${thresholdBand.color}10); padding:14px 20px; display:flex; flex-direction:column; justify-content:center;">
-                <div style="font-size:11px; font-weight:500; color:#6b7280;">Overall Reviewer Agreement</div>
-                <div style="font-size:22px; font-weight:800; color:${thresholdBand.color}; margin:2px 0;">${thresholdBand.label}</div>
-                <div style="font-size:11px; color:#6b7280;">Pairwise Threshold Agreement — ${reviewers.length} reviewers, ${studyIds.length} studies, ${allEvents.length} signal events</div>
+                <div id="hero_subtitle" style="font-size:11px; font-weight:500; color:#6b7280;">Pairwise Threshold Agreement</div>
+                <div id="hero_grade" style="font-size:22px; font-weight:800; color:${thresholdBand.color}; margin:2px 0;">${thresholdBand.label}</div>
+                <div id="hero_desc" style="font-size:11px; color:#6b7280;">${reviewers.length} reviewers, ${studyIds.length} studies, ${allEvents.length} signal events</div>
             </div>
             <div style="background:#fff; padding:14px 24px; display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:100px;">
-                <div style="font-size:10px; font-weight:500; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px;">Agreement</div>
-                <div style="font-size:24px; font-weight:800; color:${thresholdBand.color};">${(thresholdAgreement * 100).toFixed(1)}%</div>
+                <div id="hero_metric_label" style="font-size:10px; font-weight:500; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px;">Agreement</div>
+                <div id="hero_metric_value" style="font-size:24px; font-weight:800; color:${thresholdBand.color};">${(thresholdAgreement * 100).toFixed(1)}%</div>
             </div>
         </div>
         <div style="border-top:1px solid ${thresholdBand.color}20;">
