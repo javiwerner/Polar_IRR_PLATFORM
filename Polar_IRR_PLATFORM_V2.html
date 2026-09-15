@@ -310,20 +310,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         <button onclick="toggleRubric()" style="background:none; border:none; font-size:20px; cursor:pointer; color:#6b7280;">&times;</button>
     </div>
 
-    <div style="font-size:12px; color:#6b7280; margin-bottom:16px; line-height:1.5;">
-        Reference guide for identifying bad Polar HR signal. Follow the decision tree and use the category options when annotating.
+    <div style="margin-bottom:12px;">
+        <a onclick="var el=document.getElementById('rulesCollapse'); var open=el.style.display!=='none'; el.style.display=open?'none':'block'; this.textContent=open?'Important Rules Before Marking ▼':'Important Rules Before Marking ▲';" style="font-size:13px; font-weight:700; cursor:pointer; color:#374151; display:block;">Important Rules Before Marking ▼</a>
+        <ul id="rulesCollapse" class="rules-list" style="padding-left:18px; display:none; margin-top:8px;">
+            <li><strong>Session start:</strong> Polar often needs 1–2 minutes to stabilize. Always check the beginning of each session.</li>
+            <li><strong>Minimum duration:</strong> Annotated segments should be 5–10+ seconds. Ignore brief blips.</li>
+            <li><strong>Merge nearby regions:</strong> If the gap between two bad segments is under ~30 seconds, merge into one trim.</li>
+            <li><strong>Impossible values:</strong> Flag Polar below 30 BPM or above 220 BPM.</li>
+            <li><strong>Data gaps:</strong> Missing Polar data or values of 0 should <strong>NOT</strong> be marked. Only flag when Polar is present but wrong.</li>
+            <li><strong>WHOOP-only errors:</strong> Do not mark Polar merely because WHOOP looks wrong. Investigate: check other sensors, activity context, signal shape, and motion.</li>
+            <li><strong>Be conservative:</strong> When evidence is balanced, leave the region unmarked rather than guessing.</li>
+        </ul>
     </div>
-
-    <h4 style="font-size:13px; margin-bottom:10px;">Important Rules Before Marking</h4>
-    <ul class="rules-list" style="padding-left:18px;">
-        <li><strong>Session start:</strong> Polar often needs 1–2 minutes to stabilize. Always check the beginning of each session.</li>
-        <li><strong>Minimum duration:</strong> Annotated segments should be 5–10+ seconds. Ignore brief blips.</li>
-        <li><strong>Merge nearby regions:</strong> If the gap between two bad segments is under ~30 seconds, merge into one trim.</li>
-        <li><strong>Impossible values:</strong> Flag Polar below 30 BPM or above 220 BPM.</li>
-        <li><strong>Data gaps:</strong> Missing Polar data or values of 0 should <strong>NOT</strong> be marked. Only flag when Polar is present but wrong.</li>
-        <li><strong>WHOOP-only errors:</strong> Do not mark Polar merely because WHOOP looks wrong. Investigate: check other sensors, activity context, signal shape, and motion.</li>
-        <li><strong>Be conservative:</strong> When evidence is balanced, leave the region unmarked rather than guessing.</li>
-    </ul>
 
     <h4 style="font-size:13px; margin:20px 0 10px;">Patterns to Flag</h4>
 
@@ -969,10 +967,219 @@ function formatSeconds(s) {
     return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
 }
 
+// ============================================================
+// AUTO-DETECTION FUNCTIONS (PDF criteria)
+// ============================================================
+function getClosestWhoopHR(study, polarTimestampMs) {
+    let bestHR = null, bestDiff = Infinity;
+    for (const [strap, data] of Object.entries(study.whoop || {})) {
+        const ts = data.ts; const hr = data.hr;
+        let lo = 0, hi = ts.length - 1;
+        while (lo <= hi) {
+            const mid = (lo + hi) >> 1;
+            const t = new Date(ts[mid]).getTime();
+            if (t < polarTimestampMs) lo = mid + 1; else hi = mid - 1;
+        }
+        for (let k = Math.max(0, lo - 1); k <= Math.min(ts.length - 1, lo); k++) {
+            const t = new Date(ts[k]).getTime();
+            if (Math.abs(t - polarTimestampMs) <= 5000) {
+                const d = Math.abs(t - polarTimestampMs);
+                if (d < bestDiff) { bestDiff = d; bestHR = hr[k]; }
+            }
+        }
+    }
+    return bestHR;
+}
+
+function mergeIntervals(intervals) {
+    if (intervals.length === 0) return [];
+    intervals.sort((a, b) => a.start - b.start);
+    const merged = [{ ...intervals[0] }];
+    for (let i = 1; i < intervals.length; i++) {
+        const last = merged[merged.length - 1];
+        if (intervals[i].start <= last.end + 1) {
+            last.end = Math.max(last.end, intervals[i].end);
+        } else {
+            merged.push({ ...intervals[i] });
+        }
+    }
+    return merged;
+}
+
+function detectFlatline(study) {
+    const hr = study.polar.hr, ts = study.polar.ts;
+    const startMs = new Date(ts[0]).getTime();
+    const intervals = [];
+    let runStart = 0, runVal = hr[0];
+    for (let i = 1; i < hr.length; i++) {
+        if (Math.abs(hr[i] - runVal) > 1) {
+            const durSec = (new Date(ts[i - 1]).getTime() - new Date(ts[runStart]).getTime()) / 1000;
+            if (durSec >= 30) {
+                const s = Math.floor((new Date(ts[runStart]).getTime() - startMs) / 1000);
+                const e = Math.ceil((new Date(ts[i - 1]).getTime() - startMs) / 1000);
+                const confidence = runVal < 50 ? 'low' : 'high';
+                intervals.push({ start: s, end: e, confidence });
+            }
+            runStart = i; runVal = hr[i];
+        }
+    }
+    const durSec = (new Date(ts[hr.length - 1]).getTime() - new Date(ts[runStart]).getTime()) / 1000;
+    if (durSec >= 30) {
+        const s = Math.floor((new Date(ts[runStart]).getTime() - startMs) / 1000);
+        const e = Math.ceil((new Date(ts[hr.length - 1]).getTime() - startMs) / 1000);
+        intervals.push({ start: s, end: e, confidence: runVal < 50 ? 'low' : 'high' });
+    }
+    return mergeIntervals(intervals);
+}
+
+function detectJumps(study) {
+    const hr = study.polar.hr, ts = study.polar.ts;
+    const startMs = new Date(ts[0]).getTime();
+    const intervals = [];
+    const jumps = [];
+    for (let i = 1; i < hr.length; i++) {
+        const dt = (new Date(ts[i]).getTime() - new Date(ts[i - 1]).getTime()) / 1000;
+        if (dt > 5) continue;
+        const dhr = hr[i] - hr[i - 1];
+        if (Math.abs(dhr) >= 25) {
+            const sec = Math.floor((new Date(ts[i]).getTime() - startMs) / 1000);
+            jumps.push({ sec, dhr, idx: i });
+            intervals.push({ start: Math.max(0, sec - 2), end: sec + 2, confidence: 'high' });
+        }
+    }
+    for (let a = 0; a < jumps.length; a++) {
+        for (let b = a + 1; b < jumps.length; b++) {
+            if (jumps[b].sec - jumps[a].sec > 60) break;
+            if ((jumps[a].dhr > 0 && jumps[b].dhr < 0) || (jumps[a].dhr < 0 && jumps[b].dhr > 0)) {
+                intervals.push({ start: jumps[a].sec, end: jumps[b].sec, confidence: 'high' });
+            }
+        }
+    }
+    return mergeIntervals(intervals);
+}
+
+function detectNoisy(study) {
+    const hr = study.polar.hr, ts = study.polar.ts;
+    const startMs = new Date(ts[0]).getTime();
+    const intervals = [];
+    for (let i = 1; i < hr.length - 1; i++) {
+        const dt1 = (new Date(ts[i]).getTime() - new Date(ts[i - 1]).getTime()) / 1000;
+        const dt2 = (new Date(ts[i + 1]).getTime() - new Date(ts[i]).getTime()) / 1000;
+        if (dt1 + dt2 <= 5 && Math.abs(hr[i] - hr[i - 1]) >= 15 && Math.abs(hr[i] - hr[i + 1]) >= 15) {
+            const sec = Math.floor((new Date(ts[i]).getTime() - startMs) / 1000);
+            intervals.push({ start: Math.max(0, sec - 10), end: sec + 10, confidence: 'high' });
+        }
+    }
+    const windowSec = 120;
+    const secTs = ts.map(t => (new Date(t).getTime() - startMs) / 1000);
+    for (let wStart = 0; wStart < secTs[secTs.length - 1] - windowSec; wStart += 30) {
+        const wEnd = wStart + windowSec;
+        const inWindow = [];
+        for (let i = 0; i < secTs.length; i++) {
+            if (secTs[i] >= wStart && secTs[i] <= wEnd) inWindow.push(i);
+        }
+        if (inWindow.length < 10) continue;
+        const vals = inWindow.map(i => hr[i]);
+        const pMin = Math.min(...vals), pMax = Math.max(...vals);
+        if (pMax - pMin < 25) continue;
+        let whoopStable = false;
+        for (const [, data] of Object.entries(study.whoop || {})) {
+            const wHrs = [];
+            for (let j = 0; j < data.ts.length; j++) {
+                const s = (new Date(data.ts[j]).getTime() - startMs) / 1000;
+                if (s >= wStart && s <= wEnd) wHrs.push(data.hr[j]);
+            }
+            if (wHrs.length >= 5) {
+                const mean = wHrs.reduce((a, b) => a + b, 0) / wHrs.length;
+                const std = Math.sqrt(wHrs.reduce((a, b) => a + (b - mean) ** 2, 0) / wHrs.length);
+                if (std < 10) { whoopStable = true; break; }
+            }
+        }
+        if (whoopStable) {
+            intervals.push({ start: Math.floor(wStart), end: Math.ceil(wEnd), confidence: 'high' });
+        }
+    }
+    return mergeIntervals(intervals);
+}
+
+function detectImpossible(study) {
+    const hr = study.polar.hr, ts = study.polar.ts;
+    const startMs = new Date(ts[0]).getTime();
+    const intervals = [];
+    let runStart = -1;
+    for (let i = 0; i < hr.length; i++) {
+        if (hr[i] < 30 || hr[i] > 220) {
+            if (runStart < 0) runStart = i;
+        } else {
+            if (runStart >= 0) {
+                const s = Math.floor((new Date(ts[runStart]).getTime() - startMs) / 1000);
+                const e = Math.ceil((new Date(ts[i - 1]).getTime() - startMs) / 1000);
+                intervals.push({ start: s, end: Math.max(e, s + 1), confidence: 'high' });
+                runStart = -1;
+            }
+        }
+    }
+    if (runStart >= 0) {
+        const s = Math.floor((new Date(ts[runStart]).getTime() - startMs) / 1000);
+        const e = Math.ceil((new Date(ts[hr.length - 1]).getTime() - startMs) / 1000);
+        intervals.push({ start: s, end: Math.max(e, s + 1), confidence: 'high' });
+    }
+    return mergeIntervals(intervals);
+}
+
+function detectMismatch(study) {
+    const hr = study.polar.hr, ts = study.polar.ts;
+    const startMs = new Date(ts[0]).getTime();
+    if (!study.whoop || Object.keys(study.whoop).length === 0) return [];
+    const intervals = [];
+    let runStart = -1;
+    for (let i = 0; i < hr.length; i++) {
+        const pMs = new Date(ts[i]).getTime();
+        const whr = getClosestWhoopHR(study, pMs);
+        const mismatch = whr !== null && Math.abs(hr[i] - whr) >= 20;
+        if (mismatch) {
+            if (runStart < 0) runStart = i;
+        } else {
+            if (runStart >= 0) {
+                const durSec = (new Date(ts[i - 1]).getTime() - new Date(ts[runStart]).getTime()) / 1000;
+                if (durSec >= 30) {
+                    const s = Math.floor((new Date(ts[runStart]).getTime() - startMs) / 1000);
+                    const e = Math.ceil((new Date(ts[i - 1]).getTime() - startMs) / 1000);
+                    intervals.push({ start: s, end: e, confidence: 'high' });
+                }
+                runStart = -1;
+            }
+        }
+    }
+    if (runStart >= 0) {
+        const durSec = (new Date(ts[hr.length - 1]).getTime() - new Date(ts[runStart]).getTime()) / 1000;
+        if (durSec >= 30) {
+            const s = Math.floor((new Date(ts[runStart]).getTime() - startMs) / 1000);
+            const e = Math.ceil((new Date(ts[hr.length - 1]).getTime() - startMs) / 1000);
+            intervals.push({ start: s, end: e, confidence: 'high' });
+        }
+    }
+    return mergeIntervals(intervals);
+}
+
+function runAutoDetect(study) {
+    return {
+        'Flatline / Lockout': detectFlatline(study),
+        'Jump(s)': detectJumps(study),
+        'Noisy Polar / Spikes': detectNoisy(study),
+        'Large Mismatch with WHOOP': detectMismatch(study),
+        'Impossible Value': detectImpossible(study),
+    };
+}
+
+// ============================================================
+// COMPUTE IRR
+// ============================================================
 function computeIRR() {
     const reviewers = Object.keys(irrData);
     const studyIds = Object.keys(STUDIES);
     const container = document.getElementById('irrResults');
+    const nR = reviewers.length;
 
     function getSecondBins(trims, study) {
         const startMs = new Date(study.polar.ts[0]).getTime();
@@ -987,7 +1194,44 @@ function computeIRR() {
         return bins;
     }
 
-    // Per-study metrics
+    function getCategoryBins(trims, study, category) {
+        const startMs = new Date(study.polar.ts[0]).getTime();
+        const endMs = new Date(study.polar.ts[study.polar.ts.length - 1]).getTime();
+        const duration = Math.ceil((endMs - startMs) / 1000);
+        const bins = new Array(duration).fill(0);
+        (trims || []).filter(t => (t.category || 'Uncategorized') === category).forEach(t => {
+            const s = Math.max(0, Math.floor((new Date(t.start).getTime() - startMs) / 1000));
+            const e = Math.min(duration, Math.ceil((new Date(t.end).getTime() - startMs) / 1000));
+            for (let i = s; i < e; i++) bins[i] = 1;
+        });
+        return bins;
+    }
+
+    function computeDilatedIoU(tolerance) {
+        let tInt = 0, tUni = 0;
+        for (let a = 0; a < nR; a++) {
+            for (let b = a + 1; b < nR; b++) {
+                studyIds.forEach(sid => {
+                    const study = STUDIES[sid];
+                    const binsA = getSecondBins(irrData[reviewers[a]][sid], study);
+                    const binsB = getSecondBins(irrData[reviewers[b]][sid], study);
+                    const dilA = new Array(binsA.length).fill(0);
+                    const dilB = new Array(binsB.length).fill(0);
+                    for (let i = 0; i < binsA.length; i++) {
+                        if (binsA[i]) for (let d = Math.max(0, i - tolerance); d < Math.min(binsA.length, i + tolerance + 1); d++) dilA[d] = 1;
+                        if (binsB[i]) for (let d = Math.max(0, i - tolerance); d < Math.min(binsB.length, i + tolerance + 1); d++) dilB[d] = 1;
+                    }
+                    for (let i = 0; i < dilA.length; i++) {
+                        if (dilA[i] || dilB[i]) tUni++;
+                        if (dilA[i] && dilB[i]) tInt++;
+                    }
+                });
+            }
+        }
+        return tUni > 0 ? tInt / tUni : 0;
+    }
+
+    // --- Per-study metrics ---
     const studyMetrics = [];
     let totalIntersection = 0, totalUnion = 0;
     const pairResults = [];
@@ -1008,7 +1252,6 @@ function computeIRR() {
             return bins;
         });
 
-        // Per-study IoU (union of all pairs)
         let sInt = 0, sUni = 0;
         for (let i = 0; i < duration; i++) {
             const anyFlagged = allBins.some(b => b[i]);
@@ -1018,22 +1261,16 @@ function computeIRR() {
         }
         const studyIoU = sUni > 0 ? sInt / sUni : (allBins.every(b => b.reduce((s,v)=>s+v,0) === 0) ? 1 : 0);
 
-        // Per-study flagged %
-        const avgFlagged = allBins.reduce((s, b) => s + b.reduce((ss, v) => ss + v, 0), 0) / reviewers.length;
+        const avgFlagged = allBins.reduce((s, b) => s + b.reduce((ss, v) => ss + v, 0), 0) / nR;
         const flaggedPct = duration > 0 ? (avgFlagged / duration) * 100 : 0;
-
-        // Per-reviewer region counts for this study
         const regionsPerReviewer = reviewers.map(r => (irrData[r][sid] || []).length);
 
-        studyMetrics.push({
-            sid, campaign: study.campaign || '—', duration, studyIoU, flaggedPct, regionsPerReviewer,
-            allBins, startMs, endMs
-        });
+        studyMetrics.push({ sid, campaign: study.campaign || '—', duration, studyIoU, flaggedPct, regionsPerReviewer, allBins, startMs, endMs });
     });
 
-    // Global pairwise IoU
-    for (let a = 0; a < reviewers.length; a++) {
-        for (let b = a + 1; b < reviewers.length; b++) {
+    // --- Global pairwise IoU ---
+    for (let a = 0; a < nR; a++) {
+        for (let b = a + 1; b < nR; b++) {
             let pairInt = 0, pairUni = 0;
             studyIds.forEach(sid => {
                 const study = STUDIES[sid];
@@ -1044,122 +1281,391 @@ function computeIRR() {
                     if (binsA[i] && binsB[i]) { pairInt++; totalIntersection++; }
                 }
             });
-            const iou = pairUni > 0 ? (pairInt / pairUni) : 1;
-            pairResults.push({ a: reviewers[a], b: reviewers[b], iou });
+            pairResults.push({ a: reviewers[a], b: reviewers[b], iou: pairUni > 0 ? pairInt / pairUni : 1 });
         }
     }
 
-    // Fleiss' Kappa
-    let totalN = 0, sumP = 0;
-    const categoryTotals = [0, 0];
-    studyIds.forEach(sid => {
-        const study = STUDIES[sid];
-        const allBins = reviewers.map(r => getSecondBins(irrData[r][sid], study));
-        const duration = allBins[0].length;
-        const nR = reviewers.length;
-        for (let i = 0; i < duration; i++) {
-            const bad = allBins.reduce((s, b) => s + b[i], 0);
-            const notBad = nR - bad;
-            categoryTotals[0] += notBad;
-            categoryTotals[1] += bad;
-            sumP += (bad * (bad - 1) + notBad * (notBad - 1));
-            totalN++;
-        }
-    });
-    const nR = reviewers.length;
-    const Pbar = totalN > 0 ? sumP / (totalN * nR * (nR - 1)) : 0;
-    const totalRatings = totalN * nR;
-    const Pe = Math.pow(categoryTotals[0] / totalRatings, 2) + Math.pow(categoryTotals[1] / totalRatings, 2);
-    const kappa = Pe < 1 ? (Pbar - Pe) / (1 - Pe) : 1;
     const overallIoU = totalUnion > 0 ? totalIntersection / totalUnion : 0;
-
-    const kappaBand = getAgreementBand(kappa);
     const iouBand = getAgreementBand(overallIoU);
 
-    // Boundary-tolerant IoU (+/-5s dilation)
-    const TOLERANCE = 5;
-    let tolInt = 0, tolUni = 0;
-    for (let a = 0; a < reviewers.length; a++) {
-        for (let b = a + 1; b < reviewers.length; b++) {
-            studyIds.forEach(sid => {
-                const study = STUDIES[sid];
-                const binsA = getSecondBins(irrData[reviewers[a]][sid], study);
-                const binsB = getSecondBins(irrData[reviewers[b]][sid], study);
-                // Dilate bins by TOLERANCE
-                const dilA = new Array(binsA.length).fill(0);
-                const dilB = new Array(binsB.length).fill(0);
-                for (let i = 0; i < binsA.length; i++) {
-                    if (binsA[i]) for (let d = Math.max(0, i - TOLERANCE); d < Math.min(binsA.length, i + TOLERANCE + 1); d++) dilA[d] = 1;
-                    if (binsB[i]) for (let d = Math.max(0, i - TOLERANCE); d < Math.min(binsB.length, i + TOLERANCE + 1); d++) dilB[d] = 1;
-                }
-                for (let i = 0; i < dilA.length; i++) {
-                    if (dilA[i] || dilB[i]) tolUni++;
-                    if (dilA[i] && dilB[i]) tolInt++;
-                }
-            });
-        }
-    }
-    const tolerantIoU = tolUni > 0 ? tolInt / tolUni : 0;
+    // --- Boundary-tolerant IoU ---
+    const tolerantIoU5 = computeDilatedIoU(5);
+    const tolerantIoU10 = computeDilatedIoU(10);
 
-    // Per-campaign Kappa
+    // --- Per-campaign IoU ---
     const campaignGroups = {};
     studyIds.forEach(sid => {
         const camp = STUDIES[sid].campaign || 'Unknown';
         if (!campaignGroups[camp]) campaignGroups[camp] = [];
         campaignGroups[camp].push(sid);
     });
-    const campaignKappas = Object.entries(campaignGroups).map(([camp, sids]) => {
-        let cTotalN = 0, cSumP = 0;
-        const cCatTotals = [0, 0];
-        sids.forEach(sid => {
-            const study = STUDIES[sid];
-            const allB = reviewers.map(r => getSecondBins(irrData[r][sid], study));
-            const dur = allB[0].length;
-            for (let i = 0; i < dur; i++) {
-                const bad = allB.reduce((s, b) => s + b[i], 0);
-                const notBad = nR - bad;
-                cCatTotals[0] += notBad;
-                cCatTotals[1] += bad;
-                cSumP += (bad * (bad - 1) + notBad * (notBad - 1));
-                cTotalN++;
+    const campaignIoUs = Object.entries(campaignGroups).map(([camp, sids]) => {
+        let cInt = 0, cUni = 0;
+        for (let a = 0; a < nR; a++) {
+            for (let b = a + 1; b < nR; b++) {
+                sids.forEach(sid => {
+                    const study = STUDIES[sid];
+                    const binsA = getSecondBins(irrData[reviewers[a]][sid], study);
+                    const binsB = getSecondBins(irrData[reviewers[b]][sid], study);
+                    for (let i = 0; i < binsA.length; i++) {
+                        if (binsA[i] || binsB[i]) cUni++;
+                        if (binsA[i] && binsB[i]) cInt++;
+                    }
+                });
             }
-        });
-        const cPbar = cTotalN > 0 ? cSumP / (cTotalN * nR * (nR - 1)) : 0;
-        const cTotalRatings = cTotalN * nR;
-        const cPe = Math.pow(cCatTotals[0] / cTotalRatings, 2) + Math.pow(cCatTotals[1] / cTotalRatings, 2);
-        const cKappa = cPe < 1 ? (cPbar - cPe) / (1 - cPe) : 1;
-        return { campaign: camp, studies: sids.length, kappa: cKappa };
-    }).sort((a, b) => b.kappa - a.kappa);
+        }
+        return { campaign: camp, studies: sids.length, iou: cUni > 0 ? cInt / cUni : 0 };
+    }).sort((a, b) => b.iou - a.iou);
 
-    // Agreement distribution
+    // --- Agreement distribution ---
     const bands = { 'Poor': 0, 'Fair': 0, 'Moderate': 0, 'Substantial': 0, 'Almost Perfect': 0 };
     studyMetrics.forEach(sm => { bands[getAgreementBand(sm.studyIoU).label]++; });
 
-    // Disagreement spotlight (5 lowest IoU studies that have at least one flag)
+    // --- Disagreement spotlight ---
     const disagreements = studyMetrics
         .filter(sm => !sm.allBins.every(b => b.reduce((s,v)=>s+v,0) === 0))
-        .sort((a, b) => a.studyIoU - b.studyIoU)
-        .slice(0, 5);
+        .sort((a, b) => a.studyIoU - b.studyIoU).slice(0, 5);
 
-    // Reviewer stats
-    const avgFlagRate = reviewerStats.reduce((s, r) => s + (r.totalSec > 0 ? r.flaggedSec / r.totalSec : 0), 0) / reviewers.length;
+    // --- Reviewer stats ---
+    const avgFlagRate = reviewerStats.reduce((s, r) => s + (r.totalSec > 0 ? r.flaggedSec / r.totalSec : 0), 0) / nR;
     const totalRegions = reviewerStats.reduce((s, r) => s + r.regionCount, 0);
 
-    // Build HTML
+    // --- Per-category IoU ---
+    const ALL_CATEGORIES = ['Flatline / Lockout', 'Jump(s)', 'Noisy Polar / Spikes', 'Large Mismatch with WHOOP', 'Impossible Value', 'Other'];
+    const categoryAgreement = {};
+    ALL_CATEGORIES.forEach(cat => {
+        let catInt = 0, catUni = 0, catRegions = 0;
+        for (let a = 0; a < nR; a++) {
+            for (let b = a + 1; b < nR; b++) {
+                studyIds.forEach(sid => {
+                    const study = STUDIES[sid];
+                    const binsA = getCategoryBins(irrData[reviewers[a]][sid], study, cat);
+                    const binsB = getCategoryBins(irrData[reviewers[b]][sid], study, cat);
+                    for (let i = 0; i < binsA.length; i++) {
+                        if (binsA[i] || binsB[i]) catUni++;
+                        if (binsA[i] && binsB[i]) catInt++;
+                    }
+                });
+            }
+        }
+        reviewers.forEach(r => {
+            studyIds.forEach(sid => {
+                catRegions += (irrData[r][sid] || []).filter(t => (t.category || 'Uncategorized') === cat).length;
+            });
+        });
+        categoryAgreement[cat] = { iou: catUni > 0 ? catInt / catUni : 0, regions: catRegions };
+    });
+
+    // --- Auto-detection + Criteria Validation ---
+    const autoDetectResults = {};
+    const DETECT_TOLERANCE = 10;
+    let totalAutoDetected = 0, totalConfirmed = 0, totalMissed = 0;
+    let totalReviewerAnnotated = 0, totalValidated = 0, totalUnvalidated = 0;
+    let totalCatMatch = 0, totalCatMismatch = 0;
+    const confusionMatrix = {};
+    const perStudyValidation = [];
+
+    studyIds.forEach(sid => {
+        const study = STUDIES[sid];
+        const startMs = new Date(study.polar.ts[0]).getTime();
+        const dur = Math.ceil((new Date(study.polar.ts[study.polar.ts.length - 1]).getTime() - startMs) / 1000);
+        const autoResult = runAutoDetect(study);
+        autoDetectResults[sid] = autoResult;
+
+        const allAutoIntervals = [];
+        Object.entries(autoResult).forEach(([cat, intervals]) => {
+            intervals.forEach(iv => { allAutoIntervals.push({ ...iv, category: cat }); totalAutoDetected++; });
+        });
+
+        const allReviewerTrims = [];
+        reviewers.forEach(r => {
+            (irrData[r][sid] || []).forEach(t => {
+                const s = Math.max(0, Math.floor((new Date(t.start).getTime() - startMs) / 1000));
+                const e = Math.min(dur, Math.ceil((new Date(t.end).getTime() - startMs) / 1000));
+                allReviewerTrims.push({ start: s, end: e, category: t.category || 'Uncategorized', reviewer: r });
+                totalReviewerAnnotated++;
+            });
+        });
+
+        let studyMissed = 0, studyConfirmed = 0, studyUnvalidated = 0, studyMismatches = [];
+
+        allAutoIntervals.forEach(ai => {
+            const overlap = allReviewerTrims.some(rt =>
+                rt.start < ai.end + DETECT_TOLERANCE && rt.end > ai.start - DETECT_TOLERANCE
+            );
+            if (overlap) { totalConfirmed++; studyConfirmed++; }
+            else { totalMissed++; studyMissed++; }
+        });
+
+        allReviewerTrims.forEach(rt => {
+            const matchingAuto = allAutoIntervals.find(ai =>
+                ai.start < rt.end + DETECT_TOLERANCE && ai.end > rt.start - DETECT_TOLERANCE
+            );
+            if (matchingAuto) {
+                totalValidated++;
+                if (rt.category !== 'Uncategorized' && rt.category !== matchingAuto.category) {
+                    totalCatMismatch++;
+                    studyMismatches.push({ reviewer: rt.reviewer, reviewerCat: rt.category, autoCat: matchingAuto.category, start: rt.start, end: rt.end });
+                    if (!confusionMatrix[rt.category]) confusionMatrix[rt.category] = {};
+                    confusionMatrix[rt.category][matchingAuto.category] = (confusionMatrix[rt.category][matchingAuto.category] || 0) + 1;
+                } else if (rt.category !== 'Uncategorized') {
+                    totalCatMatch++;
+                    if (!confusionMatrix[rt.category]) confusionMatrix[rt.category] = {};
+                    confusionMatrix[rt.category][rt.category] = (confusionMatrix[rt.category][rt.category] || 0) + 1;
+                }
+            } else {
+                totalUnvalidated++; studyUnvalidated++;
+            }
+        });
+
+        perStudyValidation.push({ sid, autoCount: allAutoIntervals.length, confirmed: studyConfirmed, missed: studyMissed, unvalidated: studyUnvalidated, mismatches: studyMismatches });
+    });
+
+    // --- Reasons Analysis (with Other included) ---
+    const overlappingRegions = [];
+    const allNotes = [];
+    studyIds.forEach(sid => {
+        const study = STUDIES[sid];
+        const startMs = new Date(study.polar.ts[0]).getTime();
+        const duration = Math.ceil((new Date(study.polar.ts[study.polar.ts.length - 1]).getTime() - startMs) / 1000);
+        const allTrimsArr = [];
+        reviewers.forEach(r => {
+            (irrData[r][sid] || []).forEach(t => {
+                const note = (t.note || t.reason || '').trim();
+                if (note) allNotes.push(note);
+                allTrimsArr.push({ reviewer: r, start: Math.max(0, (new Date(t.start).getTime() - startMs) / 1000), end: Math.min(duration, (new Date(t.end).getTime() - startMs) / 1000), note, category: t.category || 'Uncategorized' });
+            });
+        });
+        for (let i = 0; i < allTrimsArr.length; i++) {
+            const cluster = [allTrimsArr[i]];
+            for (let j = i + 1; j < allTrimsArr.length; j++) {
+                if (allTrimsArr[j].reviewer === allTrimsArr[i].reviewer) continue;
+                if (allTrimsArr[j].start < allTrimsArr[i].end && allTrimsArr[j].end > allTrimsArr[i].start) {
+                    if (!cluster.find(c => c.reviewer === allTrimsArr[j].reviewer)) cluster.push(allTrimsArr[j]);
+                }
+            }
+            if (cluster.length >= 2 && cluster.some(c => c.note)) {
+                const key = sid + '_' + Math.round(cluster[0].start);
+                if (!overlappingRegions.find(o => o.key === key)) {
+                    overlappingRegions.push({ key, sid, cluster, startSec: Math.min(...cluster.map(c=>c.start)), endSec: Math.max(...cluster.map(c=>c.end)) });
+                }
+            }
+        }
+    });
+
+    const noteFreq = {};
+    allNotes.forEach(n => { const lower = n.toLowerCase(); noteFreq[lower] = (noteFreq[lower] || { text: n, count: 0 }); noteFreq[lower].count++; });
+    const sortedNotes = Object.values(noteFreq).sort((a, b) => b.count - a.count);
+
+    const allCategories = [];
+    const categoryReviewerCounts = {};
+    reviewers.forEach(r => {
+        studyIds.forEach(sid => {
+            (irrData[r][sid] || []).forEach(t => {
+                const cat = t.category || null;
+                if (cat && cat !== 'Uncategorized') {
+                    allCategories.push(cat);
+                    if (!categoryReviewerCounts[cat]) categoryReviewerCounts[cat] = {};
+                    categoryReviewerCounts[cat][r] = (categoryReviewerCounts[cat][r] || 0) + 1;
+                }
+            });
+        });
+    });
+    const hasV2Categories = allCategories.length > 0;
+
+    const THEMES = [
+        { canonical: 'Flatline / Lockout', description: 'HR stays constant while WHOOP shows normal variation',
+          v2Category: 'Flatline / Lockout',
+          patterns: ['flatline', 'lockout', 'flat', 'staircase', 'stepwise', 'stays constant'] },
+        { canonical: 'Jump(s)', description: 'Abrupt HR changes that don\'t match WHOOP',
+          v2Category: 'Jump(s)',
+          patterns: ['jump', 'jumpy', 'sudden', 'abrupt', 'staircase'] },
+        { canonical: 'Noisy Polar / Spikes', description: 'High-frequency noise, erratic spikes, or jittery signal',
+          v2Category: 'Noisy Polar / Spikes',
+          patterns: ['noisy', 'noise', 'spike', 'spikes', 'erratic', 'jitter', 'dropout', 'drop out'] },
+        { canonical: 'Large Mismatch with WHOOP', description: 'Polar and WHOOP diverge significantly',
+          v2Category: 'Large Mismatch with WHOOP',
+          patterns: ['mismatch', 'multi device', 'multidevice', 'multi-device', 'disagreement', 'discrepancy', 'inconsistent', 'disgreement'] },
+        { canonical: 'Impossible Value', description: 'HR below 30 or above 220 BPM',
+          v2Category: 'Impossible Value',
+          patterns: ['impossible', 'physiolog', 'unrealistic', 'unreliable', '<30', '>220'] },
+        { canonical: 'Other', description: 'Does not fit the 5 named patterns',
+          v2Category: 'Other',
+          patterns: [] },
+    ];
+    const themeCounts = THEMES.map(t => ({ ...t, count: 0, reviewerCounts: {} }));
+
+    if (hasV2Categories) {
+        allCategories.forEach(cat => {
+            const tc = themeCounts.find(t => t.v2Category === cat);
+            if (tc) tc.count++;
+        });
+        reviewers.forEach(r => {
+            themeCounts.forEach(tc => {
+                tc.reviewerCounts[r] = (categoryReviewerCounts[tc.v2Category] || {})[r] || 0;
+            });
+        });
+    } else {
+        allNotes.forEach(n => {
+            const lower = n.toLowerCase();
+            let matched = false;
+            themeCounts.forEach(t => {
+                if (t.patterns.length > 0 && t.patterns.some(p => lower.includes(p))) { t.count++; matched = true; }
+            });
+            if (!matched) { const otherTc = themeCounts.find(t => t.canonical === 'Other'); if (otherTc) otherTc.count++; }
+        });
+        reviewers.forEach(r => {
+            const rNotes = [];
+            studyIds.forEach(sid => {
+                (irrData[r][sid] || []).forEach(t => {
+                    const note = (t.note || t.reason || t.notes || '').trim();
+                    if (note) rNotes.push(note.toLowerCase());
+                });
+            });
+            themeCounts.forEach(tc => {
+                if (tc.patterns.length > 0) {
+                    tc.reviewerCounts[r] = rNotes.filter(n => tc.patterns.some(p => n.includes(p))).length;
+                } else {
+                    tc.reviewerCounts[r] = rNotes.filter(n => !THEMES.some(t => t.patterns.length > 0 && t.patterns.some(p => n.includes(p)))).length;
+                }
+            });
+        });
+    }
+    const activeThemes = themeCounts.filter(t => t.count > 0).sort((a, b) => b.count - a.count);
+
+    // === REPORT DATA STRUCTURES (compute all, render subset) ===
+    // s1: Core finding
+    const rd_coreFinding = { strictIoU: overallIoU, tolerantIoU5, tolerantIoU10, gap5: tolerantIoU5 - overallIoU, gap10: tolerantIoU10 - overallIoU };
+
+    // s2: Duration predicts agreement
+    const GAP_TOLERANCE = 15;
+    const mergedEvents = [];
+    studyIds.forEach(sid => {
+        const study = STUDIES[sid];
+        const startMs = new Date(study.polar.ts[0]).getTime();
+        const dur = Math.ceil((new Date(study.polar.ts[study.polar.ts.length - 1]).getTime() - startMs) / 1000);
+        const allBins = reviewers.map(r => getSecondBins(irrData[r][sid], study));
+        const unionBins = new Array(dur).fill(0);
+        for (let i = 0; i < dur; i++) { if (allBins.some(b => b[i])) unionBins[i] = 1; }
+        let evStart = -1;
+        for (let i = 0; i <= dur; i++) {
+            if (i < dur && unionBins[i]) { if (evStart < 0) evStart = i; }
+            else if (evStart >= 0) {
+                let gapEnd = i;
+                while (gapEnd < dur && !unionBins[gapEnd] && gapEnd - i < GAP_TOLERANCE) gapEnd++;
+                if (gapEnd < dur && unionBins[gapEnd]) { continue; }
+                const nFlagged = allBins.map(b => { for (let j = evStart; j < i; j++) if (b[j]) return 1; return 0; }).reduce((a,b) => a+b, 0);
+                mergedEvents.push({ sid, start: evStart, end: i, duration: i - evStart, nFlagged });
+                evStart = -1;
+            }
+        }
+    });
+    const shortEvents = mergedEvents.filter(e => e.duration < 60);
+    const medEvents = mergedEvents.filter(e => e.duration >= 60 && e.duration < 300);
+    const longEvents = mergedEvents.filter(e => e.duration >= 300);
+    const avgFlaggers = arr => arr.length > 0 ? arr.reduce((s, e) => s + e.nFlagged, 0) / arr.length : 0;
+    const rd_durationAgreement = { short: { count: shortEvents.length, avgReviewers: avgFlaggers(shortEvents) }, medium: { count: medEvents.length, avgReviewers: avgFlaggers(medEvents) }, long: { count: longEvents.length, avgReviewers: avgFlaggers(longEvents) } };
+
+    // s3: Contentious %
+    let unanimousSec = 0, majoritySec = 0, minoritySec = 0, totalFlaggedSec = 0;
+    studyIds.forEach(sid => {
+        const study = STUDIES[sid]; const dur = studyMetrics.find(s => s.sid === sid).duration;
+        const allBins = reviewers.map(r => getSecondBins(irrData[r][sid], study));
+        for (let i = 0; i < dur; i++) {
+            const ct = allBins.reduce((s, b) => s + b[i], 0);
+            if (ct > 0) { totalFlaggedSec++; if (ct === nR) unanimousSec++; else if (ct > nR / 2) majoritySec++; else minoritySec++; }
+        }
+    });
+    const rd_contentious = { unanimous: unanimousSec, majority: majoritySec, minority: minoritySec, total: totalFlaggedSec };
+
+    // s4: Trim policies
+    const totalSessionSec = studyMetrics.reduce((s, sm) => s + sm.duration, 0);
+    const rd_trimPolicies = [
+        { policy: 'Unanimous (all agree)', trimmedSec: unanimousSec, retained: totalSessionSec > 0 ? ((totalSessionSec - unanimousSec) / totalSessionSec * 100) : 100, confidence: 'Highest' },
+        { policy: 'Majority rule (>50%)', trimmedSec: unanimousSec + majoritySec, retained: totalSessionSec > 0 ? ((totalSessionSec - unanimousSec - majoritySec) / totalSessionSec * 100) : 100, confidence: 'High' },
+        { policy: 'Any flag', trimmedSec: totalFlaggedSec, retained: totalSessionSec > 0 ? ((totalSessionSec - totalFlaggedSec) / totalSessionSec * 100) : 100, confidence: 'Conservative' },
+    ];
+
+    // s5: Reviewer clusters
+    const pairSpread = pairResults.length > 0 ? Math.max(...pairResults.map(p=>p.iou)) - Math.min(...pairResults.map(p=>p.iou)) : 0;
+    const rd_reviewerClusters = { pairSpread, reviewerStats: reviewers.map((r, i) => {
+        const rate = reviewerStats[i].totalSec > 0 ? reviewerStats[i].flaggedSec / reviewerStats[i].totalSec : 0;
+        const isOutlier = avgFlagRate > 0 && (rate > avgFlagRate * 2 || rate < avgFlagRate * 0.5);
+        return { reviewer: r, flaggedSec: reviewerStats[i].flaggedSec, regionCount: reviewerStats[i].regionCount, rate, isOutlier };
+    })};
+
+    // s6: Temporal patterns
+    const temporalBuckets = { first25: 0, middle50: 0, last25: 0, firstTotal: 0, midTotal: 0, lastTotal: 0 };
+    studyIds.forEach(sid => {
+        const dur = studyMetrics.find(s => s.sid === sid).duration;
+        const q1 = Math.floor(dur * 0.25), q3 = Math.floor(dur * 0.75);
+        reviewers.forEach(r => {
+            (irrData[r][sid] || []).forEach(t => {
+                const startMs2 = studyMetrics.find(s => s.sid === sid).startMs;
+                const tMid = ((new Date(t.start).getTime() + new Date(t.end).getTime()) / 2 - startMs2) / 1000;
+                if (tMid < q1) temporalBuckets.first25++; else if (tMid < q3) temporalBuckets.middle50++; else temporalBuckets.last25++;
+            });
+        });
+        temporalBuckets.firstTotal += q1; temporalBuckets.midTotal += (q3 - q1); temporalBuckets.lastTotal += (dur - q3);
+    });
+    const rd_temporal = { buckets: temporalBuckets, campaignIoUs };
+
+    // s7: Vocabulary
+    const reviewerVocab = reviewers.map(r => {
+        const notes = [];
+        studyIds.forEach(sid => { (irrData[r][sid] || []).forEach(t => { const n = (t.note || t.reason || '').trim(); if (n) notes.push(n); }); });
+        const freq = {}; notes.forEach(n => { freq[n] = (freq[n] || 0) + 1; });
+        const sorted = Object.entries(freq).sort((a,b) => b[1] - a[1]);
+        return { reviewer: r, uniquePhrases: Object.keys(freq).length, topReason: sorted.length > 0 ? sorted[0][0] : '—', totalNotes: notes.length };
+    });
+    const rd_vocabulary = { totalUnique: Object.keys(noteFreq).length, totalNotes: allNotes.length, perReviewer: reviewerVocab };
+
+    // s8: Threshold detail
+    const rd_thresholdDetail = { events: mergedEvents, soloEvents: mergedEvents.filter(e => e.nFlagged === 1).length, lowEvents: mergedEvents.filter(e => e.nFlagged >= 2 && e.nFlagged <= Math.floor(nR * 0.5)).length, modEvents: mergedEvents.filter(e => e.nFlagged > Math.floor(nR * 0.5) && e.nFlagged < nR).length, highEvents: mergedEvents.filter(e => e.nFlagged === nR).length };
+
+    // s9: Taxonomy
+    const rd_taxonomy = { themes: activeThemes, hasV2Categories, categoryAgreement };
+
+    // s10: IoU Tiers
+    const rd_iouTiers = { strict: overallIoU, tolerant5: tolerantIoU5, tolerant10: tolerantIoU10, tier: overallIoU >= 0.8 ? 'Strong' : overallIoU >= 0.6 ? 'Good' : overallIoU >= 0.4 ? 'Moderate' : 'Needs Improvement' };
+
+    // s11: Priorities
+    const rd_priorities = [];
+    if (pairSpread > 0.3) rd_priorities.push('Threshold calibration — pairwise IoU spread is ' + (pairSpread * 100).toFixed(0) + '%');
+    if (rd_vocabulary.totalUnique > 20) rd_priorities.push('Shared taxonomy — ' + rd_vocabulary.totalUnique + ' unique reason phrases need consolidation');
+    rd_reviewerClusters.reviewerStats.filter(r => r.isOutlier).forEach(r => { rd_priorities.push('Recalibrate ' + r.reviewer + ' (flag rate ' + (r.rate * 100).toFixed(1) + '% vs avg ' + (avgFlagRate * 100).toFixed(1) + '%)'); });
+    if (rd_priorities.length === 0) rd_priorities.push('No critical issues identified');
+
+    const rd_criteriaValidation = {
+        summary: { autoDetected: totalAutoDetected, confirmed: totalConfirmed, missed: totalMissed, reviewerAnnotated: totalReviewerAnnotated, validated: totalValidated, unvalidated: totalUnvalidated, categoryMatched: totalCatMatch, categoryMismatched: totalCatMismatch },
+        perStudy: perStudyValidation.filter(s => s.missed > 0 || s.unvalidated > 0 || s.mismatches.length > 0).sort((a,b) => (b.missed + b.unvalidated + b.mismatches.length) - (a.missed + a.unvalidated + a.mismatches.length)),
+        confusionMatrix
+    };
+
+    window._reportData = {
+        coreFinding: rd_coreFinding, durationAgreement: rd_durationAgreement, contentious: rd_contentious,
+        trimPolicies: rd_trimPolicies, reviewerClusters: rd_reviewerClusters, temporal: rd_temporal,
+        vocabulary: rd_vocabulary, thresholdDetail: rd_thresholdDetail, taxonomy: rd_taxonomy,
+        iouTiers: rd_iouTiers, priorities: rd_priorities, categoryAgreement, criteriaValidation: rd_criteriaValidation
+    };
+
+    // ================================================================
+    // BUILD HTML (rendered subset)
+    // ================================================================
     let html = '';
 
-    // --- HERO VERDICT ---
-    html += `<div style="text-align:center; padding:28px 20px; background:linear-gradient(135deg, ${kappaBand.color}11, ${kappaBand.color}22); border:2px solid ${kappaBand.color}44; border-radius:12px; margin-bottom:24px;">
+    // --- HERO: Overall IoU ---
+    html += `<div style="text-align:center; padding:28px 20px; background:linear-gradient(135deg, ${iouBand.color}11, ${iouBand.color}22); border:2px solid ${iouBand.color}44; border-radius:12px; margin-bottom:24px;">
         <div style="font-size:14px; font-weight:500; color:#6b7280; margin-bottom:4px;">Overall Reviewer Agreement</div>
-        <div style="font-size:40px; font-weight:800; color:${kappaBand.color}; margin-bottom:4px;">${kappaBand.label}</div>
-        <div style="font-size:24px; font-weight:600; color:#1a1a2e;">\u03BA = ${kappa.toFixed(3)}</div>
-        <div style="font-size:12px; color:#6b7280; margin-top:8px;">Fleiss' Kappa — chance-corrected agreement across ${reviewers.length} reviewers on ${studyIds.length} studies</div>
+        <div style="font-size:40px; font-weight:800; color:${iouBand.color}; margin-bottom:4px;">${iouBand.label}</div>
+        <div style="font-size:24px; font-weight:600; color:#1a1a2e;">IoU = ${(overallIoU * 100).toFixed(1)}%</div>
+        <div style="font-size:12px; color:#6b7280; margin-top:8px;">Intersection over Union — flagging agreement across ${nR} reviewers on ${studyIds.length} studies</div>
     </div>`;
 
     // --- KEY STATS ROW ---
     html += `<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:24px;">
         <div style="padding:14px; background:#f9fafb; border-radius:8px; text-align:center;">
-            <div style="font-size:22px; font-weight:700; color:#1a1a2e;">${reviewers.length}</div>
+            <div style="font-size:22px; font-weight:700; color:#1a1a2e;">${nR}</div>
             <div style="font-size:11px; color:#6b7280;">Reviewers</div>
         </div>
         <div style="padding:14px; background:#f9fafb; border-radius:8px; text-align:center;">
@@ -1171,7 +1677,7 @@ function computeIRR() {
             <div style="font-size:11px; color:#6b7280;">Strict IoU</div>
         </div>
         <div style="padding:14px; background:#f9fafb; border-radius:8px; text-align:center;">
-            <div style="font-size:22px; font-weight:700; color:${getAgreementBand(tolerantIoU).color};">${(tolerantIoU * 100).toFixed(1)}%</div>
+            <div style="font-size:22px; font-weight:700; color:${getAgreementBand(tolerantIoU5).color};">${(tolerantIoU5 * 100).toFixed(1)}%</div>
             <div style="font-size:11px; color:#6b7280;">IoU (\u00b15s tolerance)</div>
         </div>
     </div>`;
@@ -1188,27 +1694,115 @@ function computeIRR() {
         </div>
     </div>`;
 
-    // --- PER-CAMPAIGN KAPPA ---
+    // --- PER-CAMPAIGN IoU ---
     html += `<div style="margin-bottom:24px;">
         <h3 style="margin-bottom:8px; font-size:14px;">Agreement by Campaign</h3>
         <table style="width:100%; font-size:12px; border-collapse:collapse;">
             <tr style="border-bottom:1px solid #e5e7eb; background:#f9fafb;">
                 <th style="text-align:left;padding:8px 6px;">Campaign</th>
                 <th style="text-align:right;padding:8px 6px;">Studies</th>
-                <th style="text-align:right;padding:8px 6px;">Kappa</th>
+                <th style="text-align:right;padding:8px 6px;">IoU</th>
                 <th style="text-align:right;padding:8px 6px;">Level</th>
             </tr>
-            ${campaignKappas.map(c => {
-                const band = getAgreementBand(c.kappa);
+            ${campaignIoUs.map(c => {
+                const band = getAgreementBand(c.iou);
                 return `<tr style="border-bottom:1px solid #f3f4f6;">
                     <td style="padding:8px 6px;">${c.campaign}</td>
                     <td style="text-align:right;padding:8px 6px;">${c.studies}</td>
-                    <td style="text-align:right;padding:8px 6px;font-weight:600;">${c.kappa.toFixed(3)}</td>
+                    <td style="text-align:right;padding:8px 6px;font-weight:600;">${(c.iou * 100).toFixed(1)}%</td>
                     <td style="text-align:right;padding:8px 6px;color:${band.color};font-weight:500;">${band.label}</td>
                 </tr>`;
             }).join('')}
         </table>
     </div>`;
+
+    // --- CATEGORY AGREEMENT ---
+    const activeCatAg = ALL_CATEGORIES.filter(c => categoryAgreement[c].regions > 0);
+    if (activeCatAg.length > 0) {
+        html += `<div style="margin-bottom:24px;">
+            <h3 style="margin-bottom:8px; font-size:14px;">Category Agreement</h3>
+            <p style="font-size:11px; color:#6b7280; margin-bottom:10px;">Per-category IoU — how well reviewers agree on which type of issue they flagged.</p>
+            <table style="width:100%; font-size:12px; border-collapse:collapse; margin-bottom:12px;">
+                <tr style="border-bottom:1px solid #e5e7eb; background:#f9fafb;">
+                    <th style="text-align:left;padding:8px 6px;">Category</th>
+                    <th style="text-align:right;padding:8px 6px;">Regions</th>
+                    <th style="text-align:right;padding:8px 6px;">IoU</th>
+                    <th style="text-align:right;padding:8px 6px;">Agreement</th>
+                </tr>
+                ${activeCatAg.map(cat => {
+                    const ca = categoryAgreement[cat];
+                    const band = getAgreementBand(ca.iou);
+                    return `<tr style="border-bottom:1px solid #f3f4f6;">
+                        <td style="padding:8px 6px;"><span class="category-badge ${getCategoryClass(cat)}">${cat}</span></td>
+                        <td style="text-align:right;padding:8px 6px;">${ca.regions}</td>
+                        <td style="text-align:right;padding:8px 6px;font-weight:600;">${(ca.iou * 100).toFixed(1)}%</td>
+                        <td style="text-align:right;padding:8px 6px;color:${band.color};font-weight:500;">${band.label}</td>
+                    </tr>`;
+                }).join('')}
+            </table>
+            <div id="catAgChart" style="width:100%;height:${Math.max(180, activeCatAg.length * 36)}px;"></div>
+        </div>`;
+    }
+
+    // --- CRITERIA VALIDATION ---
+    const cv = rd_criteriaValidation.summary;
+    if (cv.autoDetected > 0 || cv.reviewerAnnotated > 0) {
+        const confirmRate = cv.autoDetected > 0 ? (cv.confirmed / cv.autoDetected * 100).toFixed(1) : '0.0';
+        const catMatchRate = (cv.categoryMatched + cv.categoryMismatched) > 0 ? (cv.categoryMatched / (cv.categoryMatched + cv.categoryMismatched) * 100).toFixed(1) : '—';
+        html += `<div style="margin-bottom:24px;">
+            <h3 style="margin-bottom:8px; font-size:14px;">Criteria Validation</h3>
+            <p style="font-size:11px; color:#6b7280; margin-bottom:12px;">Auto-detection from PDF criteria compared against reviewer annotations (\u00b110s tolerance).</p>
+            <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-bottom:16px;">
+                <div style="padding:12px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; text-align:center;">
+                    <div style="font-size:20px; font-weight:700; color:#166534;">${cv.autoDetected}</div>
+                    <div style="font-size:10px; color:#6b7280;">Auto-Detected</div>
+                </div>
+                <div style="padding:12px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; text-align:center;">
+                    <div style="font-size:20px; font-weight:700; color:#166534;">${confirmRate}%</div>
+                    <div style="font-size:10px; color:#6b7280;">Confirmed by Reviewers</div>
+                </div>
+                <div style="padding:12px; background:#fef2f2; border:1px solid #fecaca; border-radius:8px; text-align:center;">
+                    <div style="font-size:20px; font-weight:700; color:#991b1b;">${cv.missed}</div>
+                    <div style="font-size:10px; color:#6b7280;">Missed by All Reviewers</div>
+                </div>
+                <div style="padding:12px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; text-align:center;">
+                    <div style="font-size:20px; font-weight:700; color:#1e40af;">${catMatchRate === '—' ? '—' : catMatchRate + '%'}</div>
+                    <div style="font-size:10px; color:#6b7280;">Category Match Rate</div>
+                </div>
+            </div>`;
+
+        // Confusion heatmap
+        const confCats = [...new Set([...Object.keys(confusionMatrix), ...Object.values(confusionMatrix).flatMap(v => Object.keys(v))])].filter(c => c !== 'Uncategorized');
+        if (confCats.length > 0) {
+            html += `<div id="confusionChart" style="width:100%;height:${Math.max(250, confCats.length * 50 + 100)}px; margin-bottom:12px;"></div>`;
+        }
+
+        // Per-study drilldown
+        const topStudies = rd_criteriaValidation.perStudy.slice(0, 10);
+        if (topStudies.length > 0) {
+            html += `<details style="margin-bottom:12px;"><summary style="cursor:pointer;font-size:12px;font-weight:600;color:#374151;">Per-Study Validation Detail (top ${topStudies.length})</summary>
+                <table style="width:100%; font-size:11px; border-collapse:collapse; margin-top:8px;">
+                    <tr style="border-bottom:1px solid #e5e7eb; background:#f9fafb;">
+                        <th style="text-align:left;padding:6px;">Study</th>
+                        <th style="text-align:right;padding:6px;">Auto-Detected</th>
+                        <th style="text-align:right;padding:6px;">Confirmed</th>
+                        <th style="text-align:right;padding:6px;">Missed</th>
+                        <th style="text-align:right;padding:6px;">Unvalidated</th>
+                        <th style="text-align:right;padding:6px;">Cat Mismatches</th>
+                    </tr>
+                    ${topStudies.map(s => `<tr style="border-bottom:1px solid #f3f4f6;">
+                        <td style="padding:6px;font-weight:500;">${s.sid}</td>
+                        <td style="text-align:right;padding:6px;">${s.autoCount}</td>
+                        <td style="text-align:right;padding:6px;color:#166534;">${s.confirmed}</td>
+                        <td style="text-align:right;padding:6px;color:${s.missed > 0 ? '#991b1b' : '#6b7280'};">${s.missed}</td>
+                        <td style="text-align:right;padding:6px;color:${s.unvalidated > 0 ? '#92400e' : '#6b7280'};">${s.unvalidated}</td>
+                        <td style="text-align:right;padding:6px;color:${s.mismatches.length > 0 ? '#9333ea' : '#6b7280'};">${s.mismatches.length}</td>
+                    </tr>`).join('')}
+                </table>
+            </details>`;
+        }
+        html += `</div>`;
+    }
 
     // --- DISAGREEMENT SPOTLIGHT ---
     if (disagreements.length > 0) {
@@ -1269,129 +1863,8 @@ function computeIRR() {
         </table>
     </div>`;
 
-    // --- Section 5: Reasons Analysis ---
-    // Find overlapping regions across reviewers and compare their notes
-    const overlappingRegions = [];
-    const allNotes = [];
-    studyIds.forEach(sid => {
-        const study = STUDIES[sid];
-        const startMs = new Date(study.polar.ts[0]).getTime();
-        const duration = Math.ceil((new Date(study.polar.ts[study.polar.ts.length - 1]).getTime() - startMs) / 1000);
-        // Collect all trims with reviewer attribution
-        const allTrims = [];
-        reviewers.forEach(r => {
-            (irrData[r][sid] || []).forEach(t => {
-                const note = (t.note || t.reason || '').trim();
-                if (note) allNotes.push(note);
-                allTrims.push({ reviewer: r, start: Math.max(0, (new Date(t.start).getTime() - startMs) / 1000), end: Math.min(duration, (new Date(t.end).getTime() - startMs) / 1000), note });
-            });
-        });
-        // Find clusters: trims that overlap in time from different reviewers
-        for (let i = 0; i < allTrims.length; i++) {
-            const cluster = [allTrims[i]];
-            for (let j = i + 1; j < allTrims.length; j++) {
-                if (allTrims[j].reviewer === allTrims[i].reviewer) continue;
-                if (allTrims[j].start < allTrims[i].end && allTrims[j].end > allTrims[i].start) {
-                    if (!cluster.find(c => c.reviewer === allTrims[j].reviewer)) {
-                        cluster.push(allTrims[j]);
-                    }
-                }
-            }
-            if (cluster.length >= 2 && cluster.some(c => c.note)) {
-                const key = sid + '_' + Math.round(cluster[0].start);
-                if (!overlappingRegions.find(o => o.key === key)) {
-                    overlappingRegions.push({ key, sid, cluster, startSec: Math.min(...cluster.map(c=>c.start)), endSec: Math.max(...cluster.map(c=>c.end)) });
-                }
-            }
-        }
-    });
-
-    // Note frequency + V2 category tracking
-    const noteFreq = {};
-    const v2CategoryCounts = {};
-    allNotes.forEach(n => {
-        const lower = n.toLowerCase();
-        noteFreq[lower] = (noteFreq[lower] || { text: n, count: 0 });
-        noteFreq[lower].count++;
-    });
-    const sortedNotes = Object.values(noteFreq).sort((a, b) => b.count - a.count);
-
-    // V2: Direct category counts from structured data (preferred over regex)
-    const allCategories = [];
-    const categoryReviewerCounts = {};
-    reviewers.forEach(r => {
-        studyIds.forEach(sid => {
-            (irrData[r][sid] || []).forEach(t => {
-                const cat = t.category || null;
-                if (cat && cat !== 'Uncategorized') {
-                    allCategories.push(cat);
-                    if (!categoryReviewerCounts[cat]) categoryReviewerCounts[cat] = {};
-                    categoryReviewerCounts[cat][r] = (categoryReviewerCounts[cat][r] || 0) + 1;
-                }
-            });
-        });
-    });
-    const hasV2Categories = allCategories.length > 0;
-
-    // Theme extraction — V2 uses direct categories, fallback to regex for V1 data
-    const THEMES = [
-        { canonical: 'Flatline / Lockout', description: 'HR stays constant while WHOOP shows normal variation',
-          v2Category: 'Flatline / Lockout',
-          patterns: ['flatline', 'lockout', 'flat', 'staircase', 'stepwise', 'stays constant'] },
-        { canonical: 'Jump(s)', description: 'Abrupt HR changes that don\'t match WHOOP',
-          v2Category: 'Jump(s)',
-          patterns: ['jump', 'jumpy', 'sudden', 'abrupt', 'staircase'] },
-        { canonical: 'Noisy Polar / Spikes', description: 'High-frequency noise, erratic spikes, or jittery signal',
-          v2Category: 'Noisy Polar / Spikes',
-          patterns: ['noisy', 'noise', 'spike', 'spikes', 'erratic', 'jitter', 'dropout', 'drop out'] },
-        { canonical: 'Large Mismatch with WHOOP', description: 'Polar and WHOOP diverge significantly',
-          v2Category: 'Large Mismatch with WHOOP',
-          patterns: ['mismatch', 'multi device', 'multidevice', 'multi-device', 'disagreement', 'discrepancy', 'inconsistent', 'disgreement'] },
-        { canonical: 'Impossible Value', description: 'HR below 30 or above 220 BPM',
-          v2Category: 'Impossible Value',
-          patterns: ['impossible', 'physiolog', 'unrealistic', 'unreliable', '<30', '>220'] },
-    ];
-    const themeCounts = THEMES.map(t => ({ ...t, count: 0, reviewerCounts: {} }));
-
-    if (hasV2Categories) {
-        // V2 path: count from structured category field directly
-        allCategories.forEach(cat => {
-            const tc = themeCounts.find(t => t.v2Category === cat);
-            if (tc) tc.count++;
-        });
-        reviewers.forEach(r => {
-            themeCounts.forEach(tc => {
-                tc.reviewerCounts[r] = (categoryReviewerCounts[tc.v2Category] || {})[r] || 0;
-            });
-        });
-    } else {
-        // V1 fallback: regex-based theme extraction from free-text notes
-        allNotes.forEach(n => {
-            const lower = n.toLowerCase();
-            themeCounts.forEach(t => {
-                if (t.patterns.some(p => lower.includes(p))) {
-                    t.count++;
-                }
-            });
-        });
-        reviewers.forEach(r => {
-            const rNotes = [];
-            studyIds.forEach(sid => {
-                (irrData[r][sid] || []).forEach(t => {
-                    const note = (t.note || t.reason || t.notes || '').trim();
-                    if (note) rNotes.push(note.toLowerCase());
-                });
-            });
-            themeCounts.forEach(tc => {
-                tc.reviewerCounts[r] = rNotes.filter(n => tc.patterns.some(p => n.includes(p))).length;
-            });
-        });
-    }
-    const activeThemes = themeCounts.filter(t => t.count > 0).sort((a, b) => b.count - a.count);
-
+    // --- REASONS ANALYSIS ---
     html += `<h3 style="margin-bottom:8px; font-size:14px;">Reasons Analysis</h3>`;
-
-    // Distilled themes
     if (activeThemes.length > 0) {
         const maxCount = activeThemes[0].count;
         const sourceLabel = hasV2Categories ? 'Structured categories from V2 annotations' : 'Regex-extracted themes from free-text notes (V1 data)';
@@ -1402,7 +1875,7 @@ function computeIRR() {
                 <div style="width:240px; flex-shrink:0;">
                     <div style="font-size:12px; font-weight:600;">${t.canonical}</div>
                     <div style="font-size:10px; color:#6b7280; margin-top:2px;">${t.description || ''}</div>
-                    <div style="font-size:9px; color:#9ca3af; margin-top:3px;">Catches: ${t.patterns.map(p => '<b style="color:#374151;">' + p + '</b>').join(', ')}</div>
+                    ${t.patterns.length > 0 ? `<div style="font-size:9px; color:#9ca3af; margin-top:3px;">Catches: ${t.patterns.map(p => '<b style="color:#374151;">' + p + '</b>').join(', ')}</div>` : ''}
                 </div>
                 <div style="flex:1; height:20px; background:#f3f4f6; border-radius:4px; overflow:hidden; position:relative;">
                     <div style="height:100%; width:${(t.count / maxCount) * 100}%; background:#3b82f6; border-radius:4px;"></div>
@@ -1411,7 +1884,6 @@ function computeIRR() {
             </div>`).join('')}
         </div>`;
 
-        // Theme usage per reviewer
         html += `<div style="margin-bottom:20px;">
             <strong style="font-size:12px; color:#374151;">Theme Usage by Reviewer</strong>
             <table style="width:100%; font-size:11px; border-collapse:collapse; margin-top:6px;">
@@ -1429,7 +1901,6 @@ function computeIRR() {
         </div>`;
     }
 
-    // Raw frequency table
     if (sortedNotes.length > 0) {
         html += `<div style="margin-bottom:16px;">
             <strong style="font-size:12px; color:#374151;">Raw Note Frequency</strong>
@@ -1443,7 +1914,6 @@ function computeIRR() {
         html += `<p style="font-size:12px; color:#9ca3af; margin-bottom:16px;">No notes provided by any reviewer.</p>`;
     }
 
-    // Overlapping regions comparison
     if (overlappingRegions.length > 0) {
         html += `<div style="margin-bottom:24px;">
             <strong style="font-size:12px; color:#374151;">Compared Reasons on Overlapping Regions</strong>
@@ -1456,10 +1926,10 @@ function computeIRR() {
                 </tr>
                 ${overlappingRegions.slice(0, 40).map(o => `<tr style="border-bottom:1px solid #f3f4f6;">
                     <td style="padding:6px;font-weight:500;">${o.sid}</td>
-                    <td style="padding:6px;">${formatSeconds(Math.round(o.startSec))} → ${formatSeconds(Math.round(o.endSec))}</td>
+                    <td style="padding:6px;">${formatSeconds(Math.round(o.startSec))} \u2192 ${formatSeconds(Math.round(o.endSec))}</td>
                     ${reviewers.map(r => {
                         const match = o.cluster.find(c => c.reviewer === r);
-                        return `<td style="padding:6px;color:${match && match.note ? '#374151' : '#d1d5db'};">${match ? (match.note || '—') : ''}</td>`;
+                        return `<td style="padding:6px;color:${match && match.note ? '#374151' : '#d1d5db'};">${match ? (match.note || '\u2014') : ''}</td>`;
                     }).join('')}
                 </tr>`).join('')}
             </table>
@@ -1467,7 +1937,7 @@ function computeIRR() {
         </div>`;
     }
 
-    // --- Section 6: Per-Study Breakdown ---
+    // --- PER-STUDY BREAKDOWN ---
     html += `<h3 style="margin-bottom:8px; font-size:14px;">Per-Study Breakdown</h3>
     <p style="font-size:11px; color:#6b7280; margin-bottom:12px;">Click a study row to expand the timeline comparison and annotation details.</p>
     <table style="width:100%; font-size:12px; border-collapse:collapse; margin-bottom:24px;">
@@ -1487,7 +1957,7 @@ function computeIRR() {
                 <td style="padding:8px 6px;">${sm.campaign}</td>
                 <td style="text-align:right;padding:8px 6px;">${formatSeconds(sm.duration)}</td>
                 <td style="text-align:right;padding:8px 6px;">${sm.flaggedPct.toFixed(1)}%</td>
-                <td style="text-align:right;padding:8px 6px;">${noFlags ? '—' : (sm.studyIoU * 100).toFixed(1) + '%'}</td>
+                <td style="text-align:right;padding:8px 6px;">${noFlags ? '\u2014' : (sm.studyIoU * 100).toFixed(1) + '%'}</td>
                 <td style="text-align:right;padding:8px 6px;color:${band.color};font-weight:500;">${noFlags ? 'All Clear' : band.label}</td>
             </tr>
             <tr id="studyDetail_${idx}" style="display:none;">
@@ -1501,7 +1971,43 @@ function computeIRR() {
     // Store metrics for detail expansion
     window._irrStudyMetrics = studyMetrics;
     window._irrReviewers = reviewers;
+
+    // --- Plotly charts (rendered after DOM insertion) ---
+    // Category Agreement bar chart
+    if (activeCatAg.length > 0 && document.getElementById('catAgChart')) {
+        Plotly.newPlot('catAgChart', [{
+            type: 'bar', orientation: 'h',
+            y: activeCatAg.map(c => c), x: activeCatAg.map(c => categoryAgreement[c].iou * 100),
+            text: activeCatAg.map(c => (categoryAgreement[c].iou * 100).toFixed(1) + '%'),
+            textposition: 'outside', marker: { color: activeCatAg.map(c => getAgreementBand(categoryAgreement[c].iou).color) },
+            hovertemplate: '%{y}: %{x:.1f}% IoU<extra></extra>'
+        }], {
+            height: Math.max(180, activeCatAg.length * 36), margin: { l: 200, r: 60, t: 10, b: 30 },
+            xaxis: { title: 'IoU %', range: [0, 105], fixedrange: true },
+            yaxis: { autorange: 'reversed', fixedrange: true },
+            hovermode: 'closest'
+        }, { responsive: true, displayModeBar: false });
+    }
+
+    // Confusion heatmap
+    const confCats2 = [...new Set([...Object.keys(confusionMatrix), ...Object.values(confusionMatrix).flatMap(v => Object.keys(v))])].filter(c => c !== 'Uncategorized');
+    if (confCats2.length > 0 && document.getElementById('confusionChart')) {
+        const zVals = confCats2.map(rCat => confCats2.map(aCat => (confusionMatrix[rCat] || {})[aCat] || 0));
+        const textVals = zVals.map(row => row.map(v => v > 0 ? String(v) : ''));
+        Plotly.newPlot('confusionChart', [{
+            type: 'heatmap', z: zVals, x: confCats2, y: confCats2, text: textVals, texttemplate: '%{text}',
+            colorscale: [[0, '#f9fafb'], [0.5, '#93c5fd'], [1, '#1d4ed8']], showscale: false,
+            hovertemplate: 'Reviewer: %{y}<br>Auto-Detect: %{x}<br>Count: %{z}<extra></extra>'
+        }], {
+            height: Math.max(250, confCats2.length * 50 + 100), margin: { l: 200, r: 20, t: 30, b: 120 },
+            xaxis: { title: 'Auto-Detect Category', tickangle: -30, fixedrange: true },
+            yaxis: { title: 'Reviewer Label', autorange: 'reversed', fixedrange: true },
+            annotations: [{ text: 'Category Confusion: Reviewer Label vs Auto-Detect', xref: 'paper', yref: 'paper', x: 0.5, y: 1.08, showarrow: false, font: { size: 12, color: '#374151' } }]
+        }, { responsive: true, displayModeBar: false });
+    }
 }
+
+function getReportData() { return window._reportData; }
 
 function toggleStudyDetail(idx) {
     const row = document.getElementById('studyDetail_' + idx);
