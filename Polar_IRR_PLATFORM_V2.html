@@ -830,7 +830,7 @@ function handleIRRUpload(event) {
         reader.onload = function(e) {
             try {
                 const data = JSON.parse(e.target.result);
-                const name = file.name.replace('.json', '').replace('polar_irr_trims_', '').replace(/_/g, ' ');
+                const name = file.name.replace('.json', '').replace('polar_irr_trims_v2_', '').replace('polar_irr_trims_', '').replace(/_/g, ' ');
                 irrData[name] = data;
                 loaded++;
                 if (loaded === files.length) {
@@ -1561,7 +1561,7 @@ function exportTrims() {
 }
 
 function exportAllTrims() {
-    downloadJSON(allTrims, 'polar_irr_trims_all.json');
+    downloadJSON(allTrims, 'polar_irr_trims_v2_all.json');
 }
 
 function importProgress(event) {
