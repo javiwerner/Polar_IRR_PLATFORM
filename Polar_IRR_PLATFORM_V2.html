@@ -122,7 +122,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <h1>Polar IRR Platform <span class="v2-badge">V2</span></h1>
     <div class="header-right">
         <span id="reviewerDisplay" style="font-size: 13px; opacity: 0.8;"></span>
-        <button class="nav-btn" onclick="toggleRubric()" id="rubricBtn" style="display:none; font-size: 12px; background: #f97316; color: white; border-color: #f97316;">Hide Guidelines</button>
+        <button class="nav-btn" onclick="toggleRubric()" id="rubricBtn" style="display:none; font-size: 12px; background: #f97316; color: white; border-color: #f97316;">SIG Guidelines</button>
         <button class="nav-btn" onclick="logoutReviewer()" id="logoutBtn" style="display:none; font-size: 12px; background: #2a2a4e; color: white; border-color: #444;">Sign Out</button>
     </div>
 </div>
@@ -303,7 +303,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 </div><!-- end app-main -->
 
 <!-- SIG Rubric Side Panel -->
-<div class="rubric-panel open" id="rubricPanel">
+<div class="rubric-panel" id="rubricPanel">
     <div class="rubric-inner">
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
         <h3 style="margin:0;">SIG Annotation Guidelines</h3>
@@ -444,11 +444,6 @@ function showMainApp() {
     // Show/hide tabs based on role
     const isAdmin = currentReviewer === 'admin';
     document.getElementById('rubricBtn').style.display = isAdmin ? 'none' : 'inline-block';
-    if (!isAdmin) {
-        document.getElementById('rubricPanel').classList.add('open');
-        document.getElementById('rubricBtn').textContent = 'Hide Guidelines';
-        setTimeout(function() { var c = document.getElementById('chart'); if (c && c.data) Plotly.Plots.resize(c); }, 100);
-    }
     document.querySelector('[data-tab="studies"]').style.display = isAdmin ? 'none' : '';
     document.querySelector('[data-tab="trim"]').style.display = isAdmin ? 'none' : '';
     document.querySelector('[data-tab="dashboard"]').style.display = isAdmin ? '' : 'none';
@@ -488,6 +483,18 @@ function showTab(tab) {
     if (tabEl) tabEl.classList.add('active');
     if (tab === 'dashboard') renderDashboard();
     if (tab === 'export') renderExportProgress();
+    // Auto-open guidelines when entering trim editor, close otherwise
+    if (currentReviewer && currentReviewer !== 'admin') {
+        var panel = document.getElementById('rubricPanel');
+        if (tab === 'trim' && !panel.classList.contains('open')) {
+            panel.classList.add('open');
+            document.getElementById('rubricBtn').textContent = 'Hide Guidelines';
+            var rc = 0; var ri = setInterval(function() { var ch = document.getElementById('chart'); if (ch && ch.data) Plotly.Plots.resize(ch); if (++rc >= 12) clearInterval(ri); }, 30);
+        } else if (tab !== 'trim' && panel.classList.contains('open')) {
+            panel.classList.remove('open');
+            document.getElementById('rubricBtn').textContent = 'SIG Guidelines';
+        }
+    }
 }
 
 // ============================================================
