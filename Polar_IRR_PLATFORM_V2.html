@@ -671,13 +671,14 @@ function toggleTrimMode() {
 function togglePanZoom() {
     panMode = panMode === 'pan' ? 'zoom' : 'pan';
     const btn = document.getElementById('panZoomBtn');
-    btn.textContent = panMode === 'pan' ? 'Mode: Pan' : 'Mode: Zoom';
+    if (btn) btn.textContent = panMode === 'pan' ? 'Mode: Pan' : 'Mode: Zoom';
     Plotly.relayout('chart', { dragmode: panMode });
 }
 
 function updateTrimModeUI() {
     const btn = document.getElementById('newRegionBtn');
     const label = document.getElementById('trimModeLabel');
+    if (!btn || !label) return;
     if (trimMode) {
         btn.textContent = 'CANCEL';
         btn.classList.add('active');
