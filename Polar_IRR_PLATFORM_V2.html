@@ -65,7 +65,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 /* SIG Rubric Panel — side-by-side layout */
 .app-layout { display: flex; min-height: calc(100vh - 56px); }
-.app-main { flex: 1; min-width: 0; transition: flex 0.3s ease; }
+.app-main { flex: 1; min-width: 0; overflow: hidden; }
 .rubric-panel { width: 0; overflow: hidden; background: white; border-left: 1px solid #e5e7eb; transition: width 0.3s ease; flex-shrink: 0; }
 .rubric-panel.open { width: 380px; overflow-y: auto; }
 .rubric-panel .rubric-inner { width: 380px; padding: 20px; }
@@ -122,7 +122,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <h1>Polar IRR Platform <span class="v2-badge">V2</span></h1>
     <div class="header-right">
         <span id="reviewerDisplay" style="font-size: 13px; opacity: 0.8;"></span>
-        <button class="nav-btn" onclick="toggleRubric()" id="rubricBtn" style="display:none; font-size: 12px; background: #f97316; color: white; border-color: #f97316;">SIG Guidelines</button>
+        <button class="nav-btn" onclick="toggleRubric()" id="rubricBtn" style="display:none; font-size: 12px; background: #f97316; color: white; border-color: #f97316;">Hide Guidelines</button>
         <button class="nav-btn" onclick="logoutReviewer()" id="logoutBtn" style="display:none; font-size: 12px; background: #2a2a4e; color: white; border-color: #444;">Sign Out</button>
     </div>
 </div>
@@ -303,7 +303,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 </div><!-- end app-main -->
 
 <!-- SIG Rubric Side Panel -->
-<div class="rubric-panel" id="rubricPanel">
+<div class="rubric-panel open" id="rubricPanel">
     <div class="rubric-inner">
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
         <h3 style="margin:0;">SIG Annotation Guidelines</h3>
@@ -444,6 +444,11 @@ function showMainApp() {
     // Show/hide tabs based on role
     const isAdmin = currentReviewer === 'admin';
     document.getElementById('rubricBtn').style.display = isAdmin ? 'none' : 'inline-block';
+    if (!isAdmin) {
+        document.getElementById('rubricPanel').classList.add('open');
+        document.getElementById('rubricBtn').textContent = 'Hide Guidelines';
+        setTimeout(function() { var c = document.getElementById('chart'); if (c && c.data) Plotly.Plots.resize(c); }, 100);
+    }
     document.querySelector('[data-tab="studies"]').style.display = isAdmin ? 'none' : '';
     document.querySelector('[data-tab="trim"]').style.display = isAdmin ? 'none' : '';
     document.querySelector('[data-tab="dashboard"]').style.display = isAdmin ? '' : 'none';
@@ -1696,11 +1701,13 @@ function toggleRubric() {
         panel.classList.add('open');
         document.getElementById('rubricBtn').textContent = 'Hide Guidelines';
     }
-    // Resize Plotly chart to fit new layout after transition
-    setTimeout(function() {
+    // Resize chart repeatedly during the CSS transition so it doesn't overlap
+    var resizeCount = 0;
+    var resizeInterval = setInterval(function() {
         var chart = document.getElementById('chart');
         if (chart && chart.data) Plotly.Plots.resize(chart);
-    }, 350);
+        if (++resizeCount >= 12) clearInterval(resizeInterval);
+    }, 30);
 }
 
 // ============================================================
