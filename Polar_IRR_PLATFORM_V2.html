@@ -1,0 +1,1700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polar IRR Platform — V2</title>
+<script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+<script src="data.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8f9fa; color: #1a1a2e; }
+
+/* Header */
+.header { background: #1a1a2e; color: white; padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; }
+.header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; }
+.header-right { display: flex; align-items: center; gap: 16px; }
+.header-right select { padding: 6px 12px; border-radius: 6px; border: 1px solid #444; background: #2a2a4e; color: white; font-size: 13px; }
+
+/* Layout */
+.container { max-width: 1400px; margin: 0 auto; padding: 24px 32px; }
+.card { background: white; border-radius: 12px; border: 1px solid #e5e7eb; padding: 24px; margin-bottom: 20px; }
+.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.card-header h2 { font-size: 16px; font-weight: 600; }
+
+/* Study nav */
+.study-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.study-nav select { padding: 8px 14px; border-radius: 8px; border: 1px solid #d1d5db; font-size: 14px; min-width: 200px; }
+.study-nav .info { font-size: 13px; color: #6b7280; }
+.nav-btn { padding: 8px 16px; border-radius: 8px; border: 1px solid #d1d5db; background: white; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; }
+.nav-btn:hover { background: #f3f4f6; border-color: #9ca3af; }
+.nav-btn.primary { background: #1a1a2e; color: white; border-color: #1a1a2e; }
+.nav-btn.primary:hover { background: #2a2a4e; }
+.nav-btn.orange { background: #f97316; color: white; border-color: #f97316; }
+.nav-btn.orange:hover { background: #ea580c; }
+.nav-btn.active { background: #fff7ed; border-color: #f97316; color: #c2410c; }
+
+/* Progress */
+.progress-bar { height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; margin-top: 8px; }
+.progress-fill { height: 100%; background: #1a1a2e; border-radius: 3px; transition: width 0.3s; }
+
+/* Trim list */
+.trim-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 8px; font-size: 13px; }
+.trim-item .times { font-family: 'SF Mono', 'Fira Code', monospace; color: #374151; }
+.trim-item .duration { color: #6b7280; margin-left: 12px; }
+.trim-item .delete-btn { color: #dc2626; cursor: pointer; font-weight: 500; border: none; background: none; font-size: 13px; }
+.trim-item .delete-btn:hover { text-decoration: underline; }
+
+/* V2 Annotation Modal */
+.annotation-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 9999; display: flex; align-items: center; justify-content: center; }
+.annotation-modal { background: white; border-radius: 14px; padding: 28px 32px; width: 460px; max-width: 92vw; box-shadow: 0 20px 60px rgba(0,0,0,0.25); }
+.annotation-modal h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.annotation-modal .time-range { font-size: 13px; color: #6b7280; margin-bottom: 18px; font-family: 'SF Mono', 'Fira Code', monospace; }
+.annotation-modal .category-group { margin-bottom: 16px; }
+.annotation-modal .category-group label { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 6px; cursor: pointer; font-size: 13px; transition: all 0.12s; }
+.annotation-modal .category-group label:hover { border-color: #f97316; background: #fff7ed; }
+.annotation-modal .category-group input[type=radio] { accent-color: #f97316; width: 16px; height: 16px; }
+.annotation-modal .category-group input[type=radio]:checked + span { font-weight: 600; color: #c2410c; }
+.annotation-modal textarea { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 13px; font-family: inherit; resize: vertical; min-height: 56px; }
+.annotation-modal textarea:focus { outline: none; border-color: #f97316; box-shadow: 0 0 0 3px rgba(249,115,22,0.12); }
+.annotation-modal .btn-row { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.annotation-modal .error-msg { color: #dc2626; font-size: 12px; margin-top: 6px; display: none; }
+
+/* V2 Badge */
+.v2-badge { display: inline-block; background: #f97316; color: white; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; margin-left: 10px; letter-spacing: 0.5px; vertical-align: middle; }
+
+/* SIG Rubric Panel */
+.rubric-panel { position: fixed; top: 0; right: -480px; width: 460px; height: 100vh; background: white; box-shadow: -4px 0 24px rgba(0,0,0,0.12); z-index: 9998; transition: right 0.3s ease; overflow-y: auto; padding: 24px; }
+.rubric-panel.open { right: 0; }
+.rubric-panel h3 { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+.rubric-panel .pattern-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+.rubric-panel .pattern-card h4 { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+.rubric-panel .pattern-card p { font-size: 12px; color: #374151; line-height: 1.5; margin: 0; }
+.rubric-panel .decision-tree { background: #f9fafb; border-radius: 8px; padding: 14px; margin-bottom: 16px; font-size: 12px; line-height: 1.7; }
+.rubric-panel .decision-tree .step { display: flex; gap: 8px; margin-bottom: 6px; }
+.rubric-panel .decision-tree .step-num { background: #1a1a2e; color: white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0; }
+.rubric-panel .rules-list { font-size: 12px; color: #374151; line-height: 1.7; }
+.rubric-panel .rules-list li { margin-bottom: 4px; }
+.rubric-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.2); z-index: 9997; display: none; }
+
+/* Category badges in trim list */
+.category-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; margin-right: 8px; }
+.category-badge.cat-flatline { background: #fef2f2; color: #991b1b; }
+.category-badge.cat-jump { background: #fff7ed; color: #9a3412; }
+.category-badge.cat-noisy { background: #fefce8; color: #854d0e; }
+.category-badge.cat-mismatch { background: #eff6ff; color: #1e40af; }
+.category-badge.cat-impossible { background: #fdf2f8; color: #9d174d; }
+.category-badge.cat-other { background: #f3f4f6; color: #374151; }
+.category-badge.cat-uncategorized { background: #f3f4f6; color: #6b7280; }
+
+/* Instructions */
+.instructions { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; padding: 12px 16px; font-size: 13px; color: #92400e; margin-bottom: 16px; }
+
+/* Study table */
+.study-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.study-table th { text-align: left; padding: 10px 12px; border-bottom: 2px solid #e5e7eb; font-weight: 600; color: #374151; }
+.study-table td { padding: 10px 12px; border-bottom: 1px solid #f3f4f6; }
+.study-table tr:hover td { background: #f9fafb; }
+.study-table .mono { font-family: 'SF Mono', 'Fira Code', monospace; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+.badge-done { background: #dcfce7; color: #166534; }
+.badge-pending { background: #f3f4f6; color: #6b7280; }
+
+/* Tabs */
+.tabs { display: flex; gap: 0; border-bottom: 2px solid #e5e7eb; margin-bottom: 24px; }
+.tab { padding: 10px 20px; font-size: 14px; font-weight: 500; color: #6b7280; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s; }
+.tab:hover { color: #374151; }
+.tab.active { color: #1a1a2e; border-bottom-color: #1a1a2e; }
+
+/* Password */
+.password-gate { max-width: 360px; margin: 80px auto; text-align: center; }
+.password-gate input { width: 100%; padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; margin: 12px 0; }
+.password-gate .error { color: #dc2626; font-size: 13px; margin-bottom: 8px; }
+.rangeslider-mask-min, .rangeslider-mask-max { fill: white !important; fill-opacity: 0.85 !important; }
+.rangeslider-slidebox { fill: #e0e0e0 !important; fill-opacity: 0.6 !important; }
+</style>
+</head>
+<body>
+
+<div class="header">
+    <h1>Polar IRR Platform <span class="v2-badge">V2</span></h1>
+    <div class="header-right">
+        <span id="reviewerDisplay" style="font-size: 13px; opacity: 0.8;"></span>
+        <button class="nav-btn" onclick="toggleRubric()" id="rubricBtn" style="display:none; font-size: 12px; background: #f97316; color: white; border-color: #f97316;">SIG Guidelines</button>
+        <button class="nav-btn" onclick="logoutReviewer()" id="logoutBtn" style="display:none; font-size: 12px; background: #2a2a4e; color: white; border-color: #444;">Sign Out</button>
+    </div>
+</div>
+
+<div class="container" id="loginGate">
+    <div class="password-gate">
+        <h2 style="margin-bottom: 8px;">Sign In</h2>
+        <p style="font-size: 13px; color: #6b7280; margin-bottom: 16px;">Select your name and enter your password to begin.</p>
+        <select id="loginReviewerSelect" style="width: 100%; padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; margin-bottom: 12px;">
+            <option value="">Select role...</option>
+            <option value="Reviewer 1">Reviewer 1</option>
+            <option value="Reviewer 2">Reviewer 2</option>
+            <option value="Reviewer 3">Reviewer 3</option>
+            <option value="Reviewer 4">Reviewer 4</option>
+            <option value="Reviewer 5">Reviewer 5</option>
+            <option value="Reviewer 6">Reviewer 6</option>
+            <option value="admin">Agreement Dashboard / Export</option>
+        </select>
+        <input type="password" id="loginPwd" placeholder="Password" onkeyup="if(event.key==='Enter')loginReviewer()">
+        <div class="error" id="loginError"></div>
+        <button class="nav-btn primary" onclick="loginReviewer()" style="width: 100%; padding: 10px;">Sign In</button>
+    </div>
+</div>
+
+<div class="container" id="mainApp" style="display:none;">
+    <!-- Tabs -->
+    <div class="tabs" id="tabBar">
+        <div class="tab active" data-tab="studies" onclick="showTab('studies')">Studies</div>
+        <div class="tab" data-tab="trim" onclick="showTab('trim')">Trim Editor</div>
+        <div class="tab" data-tab="dashboard" onclick="showTab('dashboard')" style="display:none">Agreement Dashboard</div>
+        <div class="tab" data-tab="export" onclick="showTab('export')" style="display:none">Export</div>
+    </div>
+
+    <!-- Studies Tab -->
+    <div id="tab-studies" class="tab-content">
+        <div class="card">
+            <div class="card-header">
+                <h2>Study List</h2>
+                <div class="info" id="progressText">0/0 studies reviewed</div>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width: 0%"></div></div>
+            <div style="margin-top: 16px;">
+                <select id="campaignFilter" onchange="renderStudyTable()" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #d1d5db; font-size: 13px;">
+                    <option value="all">All Campaigns</option>
+                </select>
+            </div>
+            <table class="study-table" style="margin-top: 16px;">
+                <thead><tr><th>Study ID</th><th>Campaign</th><th>Duration</th><th>Trims</th><th>Status</th><th></th></tr></thead>
+                <tbody id="studyTableBody"></tbody>
+            </table>
+            
+            <!-- Submit section at bottom of studies page -->
+            <div id="studiesExportSection" style="margin-top: 32px; border-top: 1px solid #e5e7eb; padding-top: 24px;">
+                <div style="background: #f0f9ff; border: 1px solid #3b82f6; border-radius: 8px; padding: 14px 18px; margin-bottom: 16px;">
+                    <p style="font-size: 14px; color: #1e40af; margin: 0; font-weight: 500;">Save &amp; Resume Progress</p>
+                    <p style="font-size: 12px; color: #1e40af; margin: 6px 0 0 0;">Your work auto-saves in the browser, but you can also save a backup file. If your browser data is lost, use Import to resume.</p>
+                </div>
+                <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px;">
+                    <button class="nav-btn" onclick="exportTrims()" style="padding: 10px 18px; font-size: 13px; background: #1a1a2e; color: white;">Save Progress (Download Backup)</button>
+                    <label style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500;">
+                        Import Progress
+                        <input type="file" accept=".json" onchange="importProgress(event)" style="display:none;">
+                    </label>
+                </div>
+
+                <div style="background: #fffbeb; border: 1px solid #f59e0b; border-radius: 8px; padding: 14px 18px; margin-bottom: 16px;">
+                    <p style="font-size: 14px; color: #92400e; margin: 0; font-weight: 500;">When you have finished reviewing all studies:</p>
+                    <ol style="font-size: 13px; color: #92400e; margin: 10px 0 0 0; padding-left: 18px; line-height: 1.8;">
+                        <li>Click <strong>Save Progress</strong> above to download your final JSON</li>
+                        <li>Send the downloaded JSON file to <strong>Javi</strong> via Slack or email</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trim Editor Tab -->
+    <div id="tab-trim" class="tab-content" style="display:none">
+        <div class="card">
+            <div class="study-nav">
+                <button class="nav-btn" onclick="prevStudy()">&larr; Prev</button>
+                <select id="studySelect" onchange="loadStudy(this.value)" style="padding: 8px 14px; border-radius: 8px; border: 1px solid #d1d5db; font-size: 14px; min-width: 200px;"></select>
+                <button class="nav-btn" onclick="nextStudy()">Next &rarr;</button>
+                <span class="info" id="studyInfo"></span>
+                <span id="progressRing" style="margin-left:auto; display:flex; align-items:center; gap:6px;"></span>
+            </div>
+            <div class="instructions">
+                Select regions where POLAR strap data fails to meet gold standard expectations.
+                Click two points on the chart to define the start and end of a bad segment. Use the slider below the chart to pan and zoom.
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span id="trimModeLabel" style="font-size: 13px; color: #6b7280;">Click chart to mark start of bad region</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <!-- trim always active -->
+                </div>
+            </div>
+            <div id="chart" style="width: 100%; height: 450px;"></div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <h2>Your Trims</h2>
+                <span class="info" id="trimCount">0 trims</span>
+            </div>
+            <div id="trimList"></div>
+            <div style="margin-top: 16px; display: flex; gap: 8px;">
+                <button class="nav-btn primary" onclick="nextStudy()">Save & Next</button>
+                <button class="nav-btn" onclick="nextStudy()">Skip</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dashboard Tab -->
+    <div id="tab-dashboard" class="tab-content" style="display:none">
+        <div class="card">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
+                <h2 style="margin:0;">Inter-Rater Reliability</h2>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <label style="display:inline-flex; align-items:center; gap:6px; padding:7px 14px; background:#1a1a2e; color:white; border-radius:6px; cursor:pointer; font-size:12px; font-weight:500;">
+                        Upload JSON
+                        <input type="file" id="irrFileInput" accept=".json" multiple onchange="handleIRRUpload(event)" style="display:none;">
+                    </label>
+                    <span id="irrUploadStatus" style="font-size:12px; color:#6b7280;">No files loaded</span>
+                </div>
+            </div>
+            <div id="irrReviewerList" style="margin-bottom:16px;"></div>
+            <div id="irrResults"></div>
+        </div>
+    </div>
+
+    <!-- Export Tab -->
+    <div id="tab-export" class="tab-content" style="display:none">
+        <div class="card">
+            <h2 style="margin-bottom: 12px;">Submit Your Work</h2>
+            <div id="exportProgress" style="margin-bottom: 16px;"></div>
+            <div style="background: #fffbeb; border: 1px solid #f59e0b; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px;">
+                <p style="font-size: 14px; color: #92400e; margin: 0; font-weight: 500;">When you have finished reviewing all studies:</p>
+                <ol style="font-size: 13px; color: #92400e; margin: 10px 0 0 0; padding-left: 18px; line-height: 1.8;">
+                    <li>Click the <strong>Download My Trims</strong> button below</li>
+                    <li>Send the downloaded JSON file to <strong>Javi</strong> via Slack or email</li>
+                </ol>
+            </div>
+            <button class="nav-btn primary" onclick="exportTrims()" style="padding: 12px 24px; font-size: 14px;">Download My Trims (JSON)</button>
+        </div>
+    </div>
+</div>
+
+<!-- V2 Annotation Modal -->
+<div id="annotationOverlay" class="annotation-overlay" style="display:none;" onclick="if(event.target===this)cancelAnnotation()">
+    <div class="annotation-modal">
+        <h3>Annotate Bad Signal Region</h3>
+        <div class="time-range" id="annotationTimeRange"></div>
+        <div class="category-group">
+            <div style="font-size:12px; font-weight:600; color:#374151; margin-bottom:8px;">Category (required):</div>
+            <label><input type="radio" name="trimCategory" value="Flatline / Lockout"><span>Flatline / Lockout</span></label>
+            <label><input type="radio" name="trimCategory" value="Jump(s)"><span>Jump(s)</span></label>
+            <label><input type="radio" name="trimCategory" value="Noisy Polar / Spikes"><span>Noisy Polar / Spikes</span></label>
+            <label><input type="radio" name="trimCategory" value="Large Mismatch with WHOOP"><span>Large Mismatch with WHOOP</span></label>
+            <label><input type="radio" name="trimCategory" value="Impossible Value"><span>Impossible Value (&lt;30 or &gt;220 BPM)</span></label>
+            <label><input type="radio" name="trimCategory" value="Other"><span>Other (specify below)</span></label>
+        </div>
+        <div>
+            <div style="font-size:12px; font-weight:600; color:#374151; margin-bottom:6px;">Additional notes <span id="notesRequiredLabel" style="display:none; color:#dc2626;">(required for Other)</span>:</div>
+            <textarea id="annotationNotes" placeholder="Optional — add context about what you see..."></textarea>
+            <div class="error-msg" id="annotationError"></div>
+        </div>
+        <div class="btn-row">
+            <button class="nav-btn" onclick="cancelAnnotation()">Cancel</button>
+            <button class="nav-btn primary" onclick="submitAnnotation()">Save Trim</button>
+        </div>
+    </div>
+</div>
+
+<!-- SIG Rubric Slide-Out Panel -->
+<div class="rubric-backdrop" id="rubricBackdrop" onclick="toggleRubric()"></div>
+<div class="rubric-panel" id="rubricPanel">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+        <h3 style="margin:0;">SIG Annotation Guidelines</h3>
+        <button onclick="toggleRubric()" style="background:none; border:none; font-size:20px; cursor:pointer; color:#6b7280;">&times;</button>
+    </div>
+
+    <div style="font-size:12px; color:#6b7280; margin-bottom:16px; line-height:1.5;">
+        Reference guide for identifying bad Polar HR signal. Follow the decision tree and use the category options when annotating.
+    </div>
+
+    <h4 style="font-size:13px; margin-bottom:10px;">Patterns to Flag</h4>
+
+    <div class="pattern-card" style="border-left:3px solid #ef4444;">
+        <h4>1. Flatline / Lockout</h4>
+        <p>HR stays constant (e.g. 80 BPM) for an extended period while WHOOP shows normal variation. Often happens at session start when the strap hasn't locked onto the heartbeat yet.</p>
+    </div>
+    <div class="pattern-card" style="border-left:3px solid #f97316;">
+        <h4>2. Jump(s)</h4>
+        <p>Abrupt HR changes — sudden jumps up or down that don't match WHOOP. Can be a single spike or multiple sequential jumps. Often appears as a "staircase" pattern.</p>
+    </div>
+    <div class="pattern-card" style="border-left:3px solid #eab308;">
+        <h4>3. Noisy Polar / Spikes</h4>
+        <p>High-frequency noise, erratic spikes, or jittery signal. The trace looks "fuzzy" compared to WHOOP's smooth line. Individual spikes to extreme values (>220 or <30 BPM) also fall here.</p>
+    </div>
+    <div class="pattern-card" style="border-left:3px solid #3b82f6;">
+        <h4>4. Large Mismatch with WHOOP</h4>
+        <p>Polar and WHOOP traces diverge significantly but neither shows obvious artifacts. The signals tell different stories — flag if the difference is sustained and Polar is the outlier.</p>
+    </div>
+    <div class="pattern-card" style="border-left:3px solid #ec4899;">
+        <h4>5. Impossible Value</h4>
+        <p>HR reading below 30 BPM or above 220 BPM, which are physiologically impossible in the study context.</p>
+    </div>
+
+    <h4 style="font-size:13px; margin:20px 0 10px;">Decision Tree</h4>
+    <div class="decision-tree">
+        <div class="step"><span class="step-num">1</span><span><strong>See something weird in Polar?</strong> Check if WHOOP sensors show the same thing.</span></div>
+        <div class="step"><span class="step-num">2</span><span><strong>Both devices agree?</strong> → Likely real physiology. <strong>Don't trim.</strong></span></div>
+        <div class="step"><span class="step-num">3</span><span><strong>Only Polar affected?</strong> → Bad signal. <strong>Trim it.</strong></span></div>
+        <div class="step"><span class="step-num">4</span><span><strong>Ambiguous?</strong> Check context: activity type, signal shape, motion. If in doubt, <strong>trim conservatively</strong> (mark it).</span></div>
+    </div>
+
+    <h4 style="font-size:13px; margin-bottom:10px;">General Rules</h4>
+    <ul class="rules-list" style="padding-left:18px;">
+        <li><strong>Minimum duration:</strong> Flag regions ≥5-10 seconds. Brief 1-2s blips can be ignored.</li>
+        <li><strong>Merge nearby regions:</strong> If gaps between bad segments are &lt;30 seconds, merge into one trim.</li>
+        <li><strong>Session start:</strong> Always check the first 30-60 seconds — flatline/lockout is common here.</li>
+        <li><strong>Be conservative:</strong> When in doubt, flag it. It's better to over-flag than to miss bad data.</li>
+        <li><strong>Impossible values:</strong> Any reading &lt;30 or &gt;220 BPM should always be flagged.</li>
+        <li><strong>Data gaps:</strong> If Polar signal disappears entirely (no data points), flag the gap.</li>
+    </ul>
+</div>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+let STUDIES = {}; // loaded from data.js
+let currentReviewer = localStorage.getItem('irr_reviewer_v2') || '';
+let currentStudy = null;
+let trimMode = false;
+let trimStart = null;
+let panMode = 'pan'; // 'pan' or 'zoom'
+let allTrims = JSON.parse(localStorage.getItem('irr_trims_v2') || '{}');
+
+// V2 annotation categories
+const V2_CATEGORIES = [
+    { value: 'Flatline / Lockout', cssClass: 'cat-flatline' },
+    { value: 'Jump(s)', cssClass: 'cat-jump' },
+    { value: 'Noisy Polar / Spikes', cssClass: 'cat-noisy' },
+    { value: 'Large Mismatch with WHOOP', cssClass: 'cat-mismatch' },
+    { value: 'Impossible Value', cssClass: 'cat-impossible' },
+    { value: 'Other', cssClass: 'cat-other' },
+];
+function getCategoryClass(cat) {
+    const found = V2_CATEGORIES.find(c => c.value === cat);
+    return found ? found.cssClass : 'cat-uncategorized';
+}
+
+// V2 pending annotation state
+let pendingTrimStart = null;
+let pendingTrimEnd = null;
+
+const REVIEWER_PASSWORDS = {
+    'Reviewer 1': 'one',
+    'Reviewer 2': 'two',
+    'Reviewer 3': 'three',
+    'Reviewer 4': 'four',
+     'Reviewer 5': 'five',
+     'Reviewer 6': 'six',
+    'admin': 'whoop'
+};
+
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+    if (currentReviewer && REVIEWER_PASSWORDS[currentReviewer]) {
+        showMainApp();
+    }
+    loadData();
+});
+
+function loginReviewer() {
+    const name = document.getElementById('loginReviewerSelect').value;
+    const pwd = document.getElementById('loginPwd').value;
+    if (!name) { document.getElementById('loginError').textContent = 'Select a reviewer.'; return; }
+    if (pwd !== REVIEWER_PASSWORDS[name]) {
+        document.getElementById('loginError').textContent = 'Incorrect password.';
+        return;
+    }
+    currentReviewer = name;
+    localStorage.setItem('irr_reviewer_v2', name);
+    showMainApp();
+    renderStudyTable();
+    updateProgress();
+    renderTrimList();
+}
+
+function logoutReviewer() {
+    currentReviewer = '';
+    localStorage.removeItem('irr_reviewer_v2');
+    document.getElementById('mainApp').style.display = 'none';
+    document.getElementById('loginGate').style.display = 'block';
+    document.getElementById('reviewerDisplay').textContent = '';
+    document.getElementById('logoutBtn').style.display = 'none';
+    document.getElementById('loginPwd').value = '';
+    document.getElementById('loginError').textContent = '';
+}
+
+function showMainApp() {
+    document.getElementById('loginGate').style.display = 'none';
+    document.getElementById('mainApp').style.display = 'block';
+    document.getElementById('reviewerDisplay').textContent = currentReviewer === 'admin' ? 'Admin' : currentReviewer;
+    document.getElementById('logoutBtn').style.display = 'inline-block';
+    
+    // Show/hide tabs based on role
+    const isAdmin = currentReviewer === 'admin';
+    document.getElementById('rubricBtn').style.display = isAdmin ? 'none' : 'inline-block';
+    document.querySelector('[data-tab="studies"]').style.display = isAdmin ? 'none' : '';
+    document.querySelector('[data-tab="trim"]').style.display = isAdmin ? 'none' : '';
+    document.querySelector('[data-tab="dashboard"]').style.display = isAdmin ? '' : 'none';
+    document.querySelector('[data-tab="export"]').style.display = 'none';
+    
+    // Set default active tab
+    if (isAdmin) {
+        showTab('dashboard');
+    } else {
+        showTab('studies');
+    }
+}
+
+async function loadData() {
+    STUDIES = STUDY_DATA;
+    initApp();
+}
+
+function initApp() {
+    populateCampaignFilter();
+    populateStudySelect();
+    renderStudyTable();
+    updateProgress();
+    if (Object.keys(STUDIES).length > 0) {
+        loadStudy(Object.keys(STUDIES)[0]);
+    }
+}
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+function showTab(tab) {
+    document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + tab).style.display = 'block';
+    const tabEl = document.querySelector(`.tab[data-tab="${tab}"]`);
+    if (tabEl) tabEl.classList.add('active');
+    if (tab === 'dashboard') renderDashboard();
+    if (tab === 'export') renderExportProgress();
+}
+
+// ============================================================
+// STUDIES TABLE
+// ============================================================
+function populateCampaignFilter() {
+    const campaigns = [...new Set(Object.values(STUDIES).map(s => s.campaign))];
+    const sel = document.getElementById('campaignFilter');
+    campaigns.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c;
+        opt.textContent = c.replace(/^\d{8}-/, '');
+        sel.appendChild(opt);
+    });
+}
+
+function renderStudyTable() {
+    const filter = document.getElementById('campaignFilter').value;
+    const tbody = document.getElementById('studyTableBody');
+    tbody.innerHTML = '';
+    
+    Object.entries(STUDIES).forEach(([sid, study]) => {
+        if (filter !== 'all' && study.campaign !== filter) return;
+        const trims = getTrims(sid);
+        const status = trims.length > 0;
+        const campShort = study.campaign.replace(/^\d{8}-/, '');
+        const dur = Math.round((study.duration_sec || 0) / 60);
+        
+        tbody.innerHTML += `<tr>
+            <td class="mono">${sid}</td>
+            <td>${campShort}</td>
+            <td>${dur} min</td>
+            <td>${trims.length}</td>
+            <td><span class="badge ${status ? 'badge-done' : 'badge-pending'}">${status ? 'Done' : 'Not started'}</span></td>
+            <td><span onclick="openStudy('${sid}')" style="color: #1a1a2e; font-weight: 500; cursor: pointer;">Review →</span></td>
+        </tr>`;
+    });
+}
+
+function updateProgress() {
+    const total = Object.keys(STUDIES).length;
+    let done = 0;
+    Object.keys(STUDIES).forEach(sid => { if (getTrims(sid).length > 0) done++; });
+    document.getElementById('progressText').textContent = `${done}/${total} studies reviewed`;
+    document.getElementById('progressFill').style.width = `${(done/total)*100}%`;
+}
+
+function openStudy(sid) {
+    showTab('trim');
+    document.getElementById('studySelect').value = sid;
+    setTimeout(() => loadStudy(sid), 50);
+}
+
+// ============================================================
+// TRIM EDITOR
+// ============================================================
+function populateStudySelect() {
+    const sel = document.getElementById('studySelect');
+    sel.innerHTML = '';
+    Object.keys(STUDIES).forEach(sid => {
+        const opt = document.createElement('option');
+        opt.value = sid;
+        opt.textContent = sid;
+        sel.appendChild(opt);
+    });
+}
+
+function loadStudy(sid) {
+    currentStudy = sid;
+    const study = STUDIES[sid];
+    if (!study) return;
+    
+    const campShort = study.campaign.replace(/^\d{8}-/, '');
+    const dur = Math.round((study.duration_sec || 0) / 60);
+    document.getElementById('studyInfo').textContent = `${campShort} · ${dur} min`;
+    document.getElementById('studySelect').value = sid;
+    updateProgressRing();
+    
+    renderChart(study);
+    renderTrimList();
+    trimMode = false;
+    trimStart = null;
+    updateTrimModeUI();
+}
+
+function tsToMinutes(ts, startMs) {
+    return (new Date(ts).getTime() - startMs) / 60000;
+}
+
+function renderChart(study) {
+    const startMs = new Date(study.polar.ts[0]).getTime();
+    const endMin = tsToMinutes(study.polar.ts[study.polar.ts.length - 1], startMs);
+    const traces = [];
+    
+    // Polar HR
+    traces.push({
+        x: study.polar.ts.map(t => tsToMinutes(t, startMs)),
+        y: study.polar.hr,
+        mode: 'lines',
+        name: 'Polar HR (truth)',
+        line: { color: '#92400e', width: 2.5 },
+        hovertemplate: '%{y:.0f}<extra></extra>'
+    });
+    
+    // WHOOP devices (clipped to Polar time bounds)
+    const endMs = new Date(study.polar.ts[study.polar.ts.length - 1]).getTime();
+    const colors = ['#3b82f6', '#6366f1', '#8b5cf6', '#06b6d4', '#10b981'];
+    let i = 0;
+    for (const [strap, data] of Object.entries(study.whoop || {})) {
+        const xArr = [], yArr = [];
+        for (let j = 0; j < data.ts.length; j++) {
+            const t = new Date(data.ts[j]).getTime();
+            if (t >= startMs && t <= endMs) {
+                xArr.push((t - startMs) / 60000);
+                yArr.push(data.hr[j]);
+            }
+        }
+        const deviceNum = i + 1;
+        traces.push({
+            x: xArr,
+            y: yArr,
+            mode: 'lines',
+            name: `WHOOP ${deviceNum}`,
+            line: { color: colors[i % colors.length], width: 1.5 },
+            opacity: 0.75,
+            hovertemplate: '%{y:.0f}<extra></extra>'
+        });
+        i++;
+    }
+    
+    // Trim regions as shapes (convert timestamps to minutes)
+    const trims = getTrims(currentStudy);
+    const shapes = trims.map(t => ({
+        type: 'rect', xref: 'x', yref: 'paper',
+        x0: tsToMinutes(t.start, startMs), x1: tsToMinutes(t.end, startMs), y0: 0, y1: 1,
+        fillcolor: '#f97316', opacity: 0.15,
+        line: { color: '#f97316', width: 1 }
+    }));
+    
+    const annotations = trims.map(t => ({
+        x: tsToMinutes(t.start, startMs), y: 1, yref: 'paper', xref: 'x',
+        text: 'BAD POLAR', showarrow: false,
+        font: { size: 10, color: '#c2410c' },
+        yanchor: 'bottom'
+    }));
+
+    const layout = {
+        height: 420,
+        margin: { l: 50, r: 20, t: 20, b: 50 },
+        yaxis: { title: 'Heart Rate (BPM)' },
+        xaxis: { title: 'Elapsed Time (min)', rangeslider: { visible: true, range: [0, endMin] }, fixedrange: false,
+                 range: [0, endMin], autorange: false, hoverformat: '.0f',
+                 spikemode: 'across', spikethickness: 1, spikecolor: 'rgba(150,150,150,0.5)', spikedash: 'solid', spikesnap: 'cursor' },
+        legend: { orientation: 'h', y: 1.08 },
+        hovermode: 'x unified',
+        hoverlabel: { namelength: 15, bgcolor: 'rgba(255,255,255,0.5)' },
+        shapes: shapes,
+        annotations: annotations,
+        dragmode: 'pan'
+    };
+
+    Plotly.newPlot('chart', traces, layout, { responsive: true, displayModeBar: false, scrollZoom: false }).then(() => {
+        const chartEl = document.getElementById('chart');
+        chartEl.on('plotly_click', onChartClick);
+    });
+}
+
+function onChartClick(data) {
+    if (!data.points || data.points.length === 0) return;
+    const clickedMin = data.points[0].x; // elapsed minutes
+    const study = STUDIES[currentStudy];
+    const startMs = new Date(study.polar.ts[0]).getTime();
+    const clickedTime = new Date(startMs + clickedMin * 60000).toISOString();
+    
+    if (!trimStart) {
+        trimStart = clickedTime;
+        document.getElementById('trimModeLabel').textContent = `Start: ${formatTime(clickedTime)} — now click the END point`;
+    } else {
+        const end = clickedTime;
+        const start = trimStart;
+        const [s, e] = start < end ? [start, end] : [end, start];
+        // V2: Show annotation modal instead of prompt()
+        pendingTrimStart = s;
+        pendingTrimEnd = e;
+        showAnnotationModal(s, e);
+    }
+}
+
+function toggleTrimMode() {
+    trimMode = !trimMode;
+    trimStart = null;
+    updateTrimModeUI();
+}
+
+function togglePanZoom() {
+    panMode = panMode === 'pan' ? 'zoom' : 'pan';
+    const btn = document.getElementById('panZoomBtn');
+    btn.textContent = panMode === 'pan' ? 'Mode: Pan' : 'Mode: Zoom';
+    Plotly.relayout('chart', { dragmode: panMode });
+}
+
+function updateTrimModeUI() {
+    const btn = document.getElementById('newRegionBtn');
+    const label = document.getElementById('trimModeLabel');
+    if (trimMode) {
+        btn.textContent = 'CANCEL';
+        btn.classList.add('active');
+        btn.classList.remove('orange');
+        label.textContent = 'Click the START point on the chart';
+        label.style.color = '#c2410c';
+    } else {
+        btn.textContent = 'NEW REGION';
+        btn.classList.remove('active');
+        btn.classList.add('orange');
+        label.textContent = 'Click NEW REGION to begin marking';
+        label.style.color = '#6b7280';
+    }
+}
+
+function formatTime(ts) {
+    const d = new Date(ts);
+    const study = STUDIES[currentStudy];
+    if (study) {
+        const startMs = new Date(study.polar.ts[0]).getTime();
+        const elapsedSec = Math.round((d.getTime() - startMs) / 1000);
+        const m = Math.floor(elapsedSec / 60);
+        const s = elapsedSec % 60;
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    }
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+// ============================================================
+// TRIM DATA (localStorage)
+// ============================================================
+function getTrims(studyId) {
+    const key = `${currentReviewer}__${studyId}`;
+    return allTrims[key] || [];
+}
+
+function addTrim(studyId, start, end, category, notes) {
+    const key = `${currentReviewer}__${studyId}`;
+    if (!allTrims[key]) allTrims[key] = [];
+    allTrims[key].push({ start, end, category: category || 'Uncategorized', notes: notes || '', created: new Date().toISOString() });
+    saveTrims();
+}
+
+function deleteTrim(studyId, index) {
+    const key = `${currentReviewer}__${studyId}`;
+    if (allTrims[key]) {
+        allTrims[key].splice(index, 1);
+        saveTrims();
+        const chartEl = document.getElementById('chart');
+        const savedRange = chartEl._fullLayout ? chartEl._fullLayout.xaxis.range.slice() : null;
+        renderChart(STUDIES[currentStudy]);
+        if (savedRange) Plotly.relayout('chart', { 'xaxis.range': savedRange });
+        renderTrimList();
+    }
+}
+
+function saveTrims() {
+    localStorage.setItem('irr_trims_v2', JSON.stringify(allTrims));
+    updateProgress();
+    updateProgressRing();
+    renderStudyTable();
+}
+
+function updateProgressRing() {
+    const el = document.getElementById('progressRing');
+    if (!el || !currentReviewer || currentReviewer === 'admin') { if (el) el.innerHTML = ''; return; }
+    const studyIds = Object.keys(STUDIES);
+    const total = studyIds.length;
+    const currentIdx = studyIds.indexOf(currentStudy);
+    const progress = currentIdx >= 0 ? currentIdx + 1 : 0;
+    const pct = total > 0 ? progress / total : 0;
+    const r = 14, stroke = 3;
+    const circ = 2 * Math.PI * r;
+    const offset = circ * (1 - pct);
+    el.innerHTML = `
+        <svg width="36" height="36" style="transform:rotate(-90deg);">
+            <circle cx="18" cy="18" r="${r}" fill="none" stroke="#e5e7eb" stroke-width="${stroke}"/>
+            <circle cx="18" cy="18" r="${r}" fill="none" stroke="${pct >= 1 ? '#22c55e' : '#3b82f6'}" stroke-width="${stroke}" stroke-dasharray="${circ}" stroke-dashoffset="${offset}" stroke-linecap="round"/>
+        </svg>
+        <span style="font-size:11px; color:#6b7280;">${progress}/${total}</span>`;
+}
+
+function renderTrimList() {
+    const container = document.getElementById('trimList');
+    const trims = getTrims(currentStudy);
+    document.getElementById('trimCount').textContent = `${trims.length} trim${trims.length !== 1 ? 's' : ''}`;
+    
+    if (trims.length === 0) {
+        container.innerHTML = '<p style="font-size: 13px; color: #6b7280; padding: 8px 0;">No trims yet. Click the chart to mark bad segments.</p>';
+        return;
+    }
+    
+    container.innerHTML = trims.map((t, i) => {
+        const startFmt = formatTime(t.start);
+        const endFmt = formatTime(t.end);
+        const durSec = Math.round((new Date(t.end) - new Date(t.start)) / 1000);
+        const durMin = Math.floor(durSec / 60);
+        const durS = durSec % 60;
+        const cat = t.category || 'Uncategorized';
+        const catClass = getCategoryClass(cat);
+        const catBadge = `<span class="category-badge ${catClass}">${cat}</span>`;
+        const notes = t.notes ? `<span style="color:#6b7280; font-size:12px; font-style:italic;">${t.notes}</span>` : '';
+        // Also show legacy reason field if present (V1 imports)
+        const legacyReason = (!t.notes && t.reason) ? `<span style="color:#92400e; font-size:12px; font-style:italic;">"${t.reason}"</span>` : '';
+        return `<div class="trim-item">
+            <div>
+                <span class="times">${startFmt} — ${endFmt}</span>
+                <span class="duration">(${durMin}m ${durS}s)</span>
+                <div style="margin-top:4px;">${catBadge}${notes}${legacyReason}</div>
+            </div>
+            <button class="delete-btn" onclick="deleteTrim('${currentStudy}', ${i})">Delete</button>
+        </div>`;
+    }).join('');
+}
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+function prevStudy() {
+    const ids = Object.keys(STUDIES);
+    const idx = ids.indexOf(currentStudy);
+    if (idx > 0) loadStudy(ids[idx - 1]);
+}
+
+function nextStudy() {
+    const ids = Object.keys(STUDIES);
+    const idx = ids.indexOf(currentStudy);
+    if (idx < ids.length - 1) loadStudy(ids[idx + 1]);
+}
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+let irrData = JSON.parse(localStorage.getItem('irr_dashboard_data_v2') || '{}');
+function saveIRRData() { localStorage.setItem('irr_dashboard_data_v2', JSON.stringify(irrData)); }
+
+function renderDashboard() {
+    const count = Object.keys(irrData).length;
+    if (count > 0) document.getElementById('irrUploadStatus').textContent = `${count} reviewer(s) loaded`;
+    renderIRRReviewerList();
+    if (count >= 2) computeIRR();
+}
+
+function handleIRRUpload(event) {
+    const files = event.target.files;
+    let loaded = 0;
+    for (const file of files) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                const name = file.name.replace('.json', '').replace('polar_irr_trims_', '').replace(/_/g, ' ');
+                irrData[name] = data;
+                loaded++;
+                if (loaded === files.length) {
+                    saveIRRData();
+                    document.getElementById('irrUploadStatus').textContent = `${Object.keys(irrData).length} reviewer(s) loaded`;
+                    renderDashboard();
+                }
+            } catch(err) {
+                alert('Invalid JSON file: ' + file.name);
+            }
+        };
+        reader.readAsText(file);
+    }
+}
+
+function removeReviewer(name) {
+    delete irrData[name];
+    saveIRRData();
+    document.getElementById('irrUploadStatus').textContent = Object.keys(irrData).length > 0 ? `${Object.keys(irrData).length} reviewer(s) loaded` : 'No files loaded';
+    renderDashboard();
+    if (Object.keys(irrData).length < 2) document.getElementById('irrResults').innerHTML = '';
+}
+
+function renderIRRReviewerList() {
+    const container = document.getElementById('irrReviewerList');
+    const names = Object.keys(irrData);
+    if (names.length === 0) { container.innerHTML = ''; return; }
+    container.innerHTML = '<h3 style="font-size: 14px; margin-bottom: 8px;">Loaded Reviewers:</h3>' +
+        names.map(n => {
+            const studyCount = Object.keys(irrData[n]).length;
+            const trimCount = Object.values(irrData[n]).reduce((sum, arr) => sum + arr.length, 0);
+            return `<div style="display:flex; align-items:center; gap:8px; font-size: 13px; padding: 4px 0; color: #374151;">
+                <span>• ${n} — ${studyCount} studies, ${trimCount} trims</span>
+                <button onclick="removeReviewer('${n.replace(/'/g, "\\'")}')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:16px;line-height:1;padding:2px 6px;border-radius:4px;" title="Remove reviewer">&times;</button>
+            </div>`;
+        }).join('');
+}
+
+const REVIEWER_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'];
+
+function getAgreementBand(value) {
+    if (value < 0.20) return { label: 'Poor', color: '#ef4444' };
+    if (value < 0.40) return { label: 'Fair', color: '#f97316' };
+    if (value < 0.60) return { label: 'Moderate', color: '#eab308' };
+    if (value < 0.80) return { label: 'Substantial', color: '#22c55e' };
+    return { label: 'Almost Perfect', color: '#15803d' };
+}
+
+function formatSeconds(s) {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+}
+
+function computeIRR() {
+    const reviewers = Object.keys(irrData);
+    const studyIds = Object.keys(STUDIES);
+    const container = document.getElementById('irrResults');
+
+    function getSecondBins(trims, study) {
+        const startMs = new Date(study.polar.ts[0]).getTime();
+        const endMs = new Date(study.polar.ts[study.polar.ts.length - 1]).getTime();
+        const duration = Math.ceil((endMs - startMs) / 1000);
+        const bins = new Array(duration).fill(0);
+        (trims || []).forEach(t => {
+            const s = Math.max(0, Math.floor((new Date(t.start).getTime() - startMs) / 1000));
+            const e = Math.min(duration, Math.ceil((new Date(t.end).getTime() - startMs) / 1000));
+            for (let i = s; i < e; i++) bins[i] = 1;
+        });
+        return bins;
+    }
+
+    // Per-study metrics
+    const studyMetrics = [];
+    let totalIntersection = 0, totalUnion = 0;
+    const pairResults = [];
+    const reviewerStats = reviewers.map(() => ({ flaggedSec: 0, regionCount: 0, totalSec: 0 }));
+
+    studyIds.forEach(sid => {
+        const study = STUDIES[sid];
+        const startMs = new Date(study.polar.ts[0]).getTime();
+        const endMs = new Date(study.polar.ts[study.polar.ts.length - 1]).getTime();
+        const duration = Math.ceil((endMs - startMs) / 1000);
+        const allBins = reviewers.map((r, ri) => {
+            const trims = irrData[r][sid] || [];
+            reviewerStats[ri].regionCount += trims.length;
+            reviewerStats[ri].totalSec += duration;
+            const bins = getSecondBins(trims, study);
+            const flagged = bins.reduce((s, v) => s + v, 0);
+            reviewerStats[ri].flaggedSec += flagged;
+            return bins;
+        });
+
+        // Per-study IoU (union of all pairs)
+        let sInt = 0, sUni = 0;
+        for (let i = 0; i < duration; i++) {
+            const anyFlagged = allBins.some(b => b[i]);
+            const allFlagged = allBins.every(b => b[i]);
+            if (anyFlagged) sUni++;
+            if (allFlagged) sInt++;
+        }
+        const studyIoU = sUni > 0 ? sInt / sUni : (allBins.every(b => b.reduce((s,v)=>s+v,0) === 0) ? 1 : 0);
+
+        // Per-study flagged %
+        const avgFlagged = allBins.reduce((s, b) => s + b.reduce((ss, v) => ss + v, 0), 0) / reviewers.length;
+        const flaggedPct = duration > 0 ? (avgFlagged / duration) * 100 : 0;
+
+        // Per-reviewer region counts for this study
+        const regionsPerReviewer = reviewers.map(r => (irrData[r][sid] || []).length);
+
+        studyMetrics.push({
+            sid, campaign: study.campaign || '—', duration, studyIoU, flaggedPct, regionsPerReviewer,
+            allBins, startMs, endMs
+        });
+    });
+
+    // Global pairwise IoU
+    for (let a = 0; a < reviewers.length; a++) {
+        for (let b = a + 1; b < reviewers.length; b++) {
+            let pairInt = 0, pairUni = 0;
+            studyIds.forEach(sid => {
+                const study = STUDIES[sid];
+                const binsA = getSecondBins(irrData[reviewers[a]][sid], study);
+                const binsB = getSecondBins(irrData[reviewers[b]][sid], study);
+                for (let i = 0; i < binsA.length; i++) {
+                    if (binsA[i] || binsB[i]) { pairUni++; totalUnion++; }
+                    if (binsA[i] && binsB[i]) { pairInt++; totalIntersection++; }
+                }
+            });
+            const iou = pairUni > 0 ? (pairInt / pairUni) : 1;
+            pairResults.push({ a: reviewers[a], b: reviewers[b], iou });
+        }
+    }
+
+    // Fleiss' Kappa
+    let totalN = 0, sumP = 0;
+    const categoryTotals = [0, 0];
+    studyIds.forEach(sid => {
+        const study = STUDIES[sid];
+        const allBins = reviewers.map(r => getSecondBins(irrData[r][sid], study));
+        const duration = allBins[0].length;
+        const nR = reviewers.length;
+        for (let i = 0; i < duration; i++) {
+            const bad = allBins.reduce((s, b) => s + b[i], 0);
+            const notBad = nR - bad;
+            categoryTotals[0] += notBad;
+            categoryTotals[1] += bad;
+            sumP += (bad * (bad - 1) + notBad * (notBad - 1));
+            totalN++;
+        }
+    });
+    const nR = reviewers.length;
+    const Pbar = totalN > 0 ? sumP / (totalN * nR * (nR - 1)) : 0;
+    const totalRatings = totalN * nR;
+    const Pe = Math.pow(categoryTotals[0] / totalRatings, 2) + Math.pow(categoryTotals[1] / totalRatings, 2);
+    const kappa = Pe < 1 ? (Pbar - Pe) / (1 - Pe) : 1;
+    const overallIoU = totalUnion > 0 ? totalIntersection / totalUnion : 0;
+
+    const kappaBand = getAgreementBand(kappa);
+    const iouBand = getAgreementBand(overallIoU);
+
+    // Boundary-tolerant IoU (+/-5s dilation)
+    const TOLERANCE = 5;
+    let tolInt = 0, tolUni = 0;
+    for (let a = 0; a < reviewers.length; a++) {
+        for (let b = a + 1; b < reviewers.length; b++) {
+            studyIds.forEach(sid => {
+                const study = STUDIES[sid];
+                const binsA = getSecondBins(irrData[reviewers[a]][sid], study);
+                const binsB = getSecondBins(irrData[reviewers[b]][sid], study);
+                // Dilate bins by TOLERANCE
+                const dilA = new Array(binsA.length).fill(0);
+                const dilB = new Array(binsB.length).fill(0);
+                for (let i = 0; i < binsA.length; i++) {
+                    if (binsA[i]) for (let d = Math.max(0, i - TOLERANCE); d < Math.min(binsA.length, i + TOLERANCE + 1); d++) dilA[d] = 1;
+                    if (binsB[i]) for (let d = Math.max(0, i - TOLERANCE); d < Math.min(binsB.length, i + TOLERANCE + 1); d++) dilB[d] = 1;
+                }
+                for (let i = 0; i < dilA.length; i++) {
+                    if (dilA[i] || dilB[i]) tolUni++;
+                    if (dilA[i] && dilB[i]) tolInt++;
+                }
+            });
+        }
+    }
+    const tolerantIoU = tolUni > 0 ? tolInt / tolUni : 0;
+
+    // Per-campaign Kappa
+    const campaignGroups = {};
+    studyIds.forEach(sid => {
+        const camp = STUDIES[sid].campaign || 'Unknown';
+        if (!campaignGroups[camp]) campaignGroups[camp] = [];
+        campaignGroups[camp].push(sid);
+    });
+    const campaignKappas = Object.entries(campaignGroups).map(([camp, sids]) => {
+        let cTotalN = 0, cSumP = 0;
+        const cCatTotals = [0, 0];
+        sids.forEach(sid => {
+            const study = STUDIES[sid];
+            const allB = reviewers.map(r => getSecondBins(irrData[r][sid], study));
+            const dur = allB[0].length;
+            for (let i = 0; i < dur; i++) {
+                const bad = allB.reduce((s, b) => s + b[i], 0);
+                const notBad = nR - bad;
+                cCatTotals[0] += notBad;
+                cCatTotals[1] += bad;
+                cSumP += (bad * (bad - 1) + notBad * (notBad - 1));
+                cTotalN++;
+            }
+        });
+        const cPbar = cTotalN > 0 ? cSumP / (cTotalN * nR * (nR - 1)) : 0;
+        const cTotalRatings = cTotalN * nR;
+        const cPe = Math.pow(cCatTotals[0] / cTotalRatings, 2) + Math.pow(cCatTotals[1] / cTotalRatings, 2);
+        const cKappa = cPe < 1 ? (cPbar - cPe) / (1 - cPe) : 1;
+        return { campaign: camp, studies: sids.length, kappa: cKappa };
+    }).sort((a, b) => b.kappa - a.kappa);
+
+    // Agreement distribution
+    const bands = { 'Poor': 0, 'Fair': 0, 'Moderate': 0, 'Substantial': 0, 'Almost Perfect': 0 };
+    studyMetrics.forEach(sm => { bands[getAgreementBand(sm.studyIoU).label]++; });
+
+    // Disagreement spotlight (5 lowest IoU studies that have at least one flag)
+    const disagreements = studyMetrics
+        .filter(sm => !sm.allBins.every(b => b.reduce((s,v)=>s+v,0) === 0))
+        .sort((a, b) => a.studyIoU - b.studyIoU)
+        .slice(0, 5);
+
+    // Reviewer stats
+    const avgFlagRate = reviewerStats.reduce((s, r) => s + (r.totalSec > 0 ? r.flaggedSec / r.totalSec : 0), 0) / reviewers.length;
+    const totalRegions = reviewerStats.reduce((s, r) => s + r.regionCount, 0);
+
+    // Build HTML
+    let html = '';
+
+    // --- HERO VERDICT ---
+    html += `<div style="text-align:center; padding:28px 20px; background:linear-gradient(135deg, ${kappaBand.color}11, ${kappaBand.color}22); border:2px solid ${kappaBand.color}44; border-radius:12px; margin-bottom:24px;">
+        <div style="font-size:14px; font-weight:500; color:#6b7280; margin-bottom:4px;">Overall Reviewer Agreement</div>
+        <div style="font-size:40px; font-weight:800; color:${kappaBand.color}; margin-bottom:4px;">${kappaBand.label}</div>
+        <div style="font-size:24px; font-weight:600; color:#1a1a2e;">\u03BA = ${kappa.toFixed(3)}</div>
+        <div style="font-size:12px; color:#6b7280; margin-top:8px;">Fleiss' Kappa — chance-corrected agreement across ${reviewers.length} reviewers on ${studyIds.length} studies</div>
+    </div>`;
+
+    // --- KEY STATS ROW ---
+    html += `<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:24px;">
+        <div style="padding:14px; background:#f9fafb; border-radius:8px; text-align:center;">
+            <div style="font-size:22px; font-weight:700; color:#1a1a2e;">${reviewers.length}</div>
+            <div style="font-size:11px; color:#6b7280;">Reviewers</div>
+        </div>
+        <div style="padding:14px; background:#f9fafb; border-radius:8px; text-align:center;">
+            <div style="font-size:22px; font-weight:700; color:#1a1a2e;">${totalRegions}</div>
+            <div style="font-size:11px; color:#6b7280;">Total Flagged Regions</div>
+        </div>
+        <div style="padding:14px; background:#f9fafb; border-radius:8px; text-align:center;">
+            <div style="font-size:22px; font-weight:700; color:${iouBand.color};">${(overallIoU * 100).toFixed(1)}%</div>
+            <div style="font-size:11px; color:#6b7280;">Strict IoU</div>
+        </div>
+        <div style="padding:14px; background:#f9fafb; border-radius:8px; text-align:center;">
+            <div style="font-size:22px; font-weight:700; color:${getAgreementBand(tolerantIoU).color};">${(tolerantIoU * 100).toFixed(1)}%</div>
+            <div style="font-size:11px; color:#6b7280;">IoU (\u00b15s tolerance)</div>
+        </div>
+    </div>`;
+
+    // --- AGREEMENT DISTRIBUTION ---
+    const bandColors = { 'Poor': '#ef4444', 'Fair': '#f97316', 'Moderate': '#eab308', 'Substantial': '#22c55e', 'Almost Perfect': '#15803d' };
+    html += `<div style="margin-bottom:24px;">
+        <h3 style="margin-bottom:8px; font-size:14px;">Agreement Distribution</h3>
+        <div style="display:flex; gap:3px; height:24px; border-radius:6px; overflow:hidden; margin-bottom:6px;">
+            ${Object.entries(bands).map(([label, count]) => count > 0 ? `<div style="flex:${count};background:${bandColors[label]};"></div>` : '').join('')}
+        </div>
+        <div style="display:flex; gap:12px; flex-wrap:wrap; font-size:11px; color:#6b7280;">
+            ${Object.entries(bands).map(([label, count]) => count > 0 ? `<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${bandColors[label]};margin-right:4px;"></span>${label}: ${count}</span>` : '').join('')}
+        </div>
+    </div>`;
+
+    // --- PER-CAMPAIGN KAPPA ---
+    html += `<div style="margin-bottom:24px;">
+        <h3 style="margin-bottom:8px; font-size:14px;">Agreement by Campaign</h3>
+        <table style="width:100%; font-size:12px; border-collapse:collapse;">
+            <tr style="border-bottom:1px solid #e5e7eb; background:#f9fafb;">
+                <th style="text-align:left;padding:8px 6px;">Campaign</th>
+                <th style="text-align:right;padding:8px 6px;">Studies</th>
+                <th style="text-align:right;padding:8px 6px;">Kappa</th>
+                <th style="text-align:right;padding:8px 6px;">Level</th>
+            </tr>
+            ${campaignKappas.map(c => {
+                const band = getAgreementBand(c.kappa);
+                return `<tr style="border-bottom:1px solid #f3f4f6;">
+                    <td style="padding:8px 6px;">${c.campaign}</td>
+                    <td style="text-align:right;padding:8px 6px;">${c.studies}</td>
+                    <td style="text-align:right;padding:8px 6px;font-weight:600;">${c.kappa.toFixed(3)}</td>
+                    <td style="text-align:right;padding:8px 6px;color:${band.color};font-weight:500;">${band.label}</td>
+                </tr>`;
+            }).join('')}
+        </table>
+    </div>`;
+
+    // --- DISAGREEMENT SPOTLIGHT ---
+    if (disagreements.length > 0) {
+        html += `<div style="margin-bottom:24px;">
+            <h3 style="margin-bottom:8px; font-size:14px;">Disagreement Spotlight</h3>
+            <p style="font-size:11px; color:#6b7280; margin-bottom:10px;">Studies with the lowest agreement — where reviewers diverged most.</p>
+            <div style="display:grid; gap:10px;">
+                ${disagreements.map(sm => {
+                    const band = getAgreementBand(sm.studyIoU);
+                    const flaggedReviewers = reviewers.filter((r, ri) => sm.allBins[ri].reduce((s,v)=>s+v,0) > 0);
+                    return `<div style="padding:12px 14px; background:#fef2f2; border:1px solid #fecaca; border-radius:8px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-weight:600; font-size:13px;">${sm.sid}</span>
+                            <span style="font-size:12px; color:${band.color}; font-weight:500;">IoU: ${(sm.studyIoU * 100).toFixed(1)}%</span>
+                        </div>
+                        <div style="font-size:11px; color:#6b7280; margin-top:4px;">${sm.campaign} · ${formatSeconds(sm.duration)} · Flagged by ${flaggedReviewers.length} reviewer${flaggedReviewers.length > 1 ? 's' : ''}</div>
+                        <div style="font-size:11px; color:#374151; margin-top:4px;">Regions: ${sm.regionsPerReviewer.map((c, i) => `${reviewers[i].replace('Reviewer ', 'R')}: ${c}`).join(', ')}</div>
+                    </div>`;
+                }).join('')}
+            </div>
+        </div>`;
+    }
+
+    // --- PAIRWISE AGREEMENT ---
+    html += `<div style="margin-bottom:24px;">
+        <h3 style="margin-bottom:8px; font-size:14px;">Pairwise Agreement</h3>
+        <table style="width:100%; font-size:13px; border-collapse:collapse;">
+            <tr style="border-bottom:1px solid #e5e7eb;"><th style="text-align:left;padding:6px 0;">Pair</th><th style="text-align:right;padding:6px 0;">IoU</th><th style="text-align:right;padding:6px 0;">Level</th></tr>
+            ${pairResults.map(p => {
+                const band = getAgreementBand(p.iou);
+                return `<tr style="border-bottom:1px solid #f3f4f6;"><td style="padding:6px 0;">${p.a} vs ${p.b}</td><td style="text-align:right;padding:6px 0;">${(p.iou * 100).toFixed(1)}%</td><td style="text-align:right;padding:6px 0;color:${band.color};font-weight:500;">${band.label}</td></tr>`;
+            }).join('')}
+        </table>
+    </div>`;
+
+    // --- REVIEWER COMPARISON ---
+    html += `<div style="margin-bottom:24px;">
+        <h3 style="margin-bottom:8px; font-size:14px;">Reviewer Comparison</h3>
+        <table style="width:100%; font-size:13px; border-collapse:collapse;">
+            <tr style="border-bottom:1px solid #e5e7eb;">
+                <th style="text-align:left;padding:6px 0;">Reviewer</th>
+                <th style="text-align:right;padding:6px 0;">Regions</th>
+                <th style="text-align:right;padding:6px 0;">Flagged Time</th>
+                <th style="text-align:right;padding:6px 0;">Flag Rate</th>
+                <th style="text-align:right;padding:6px 0;">Status</th>
+            </tr>
+            ${reviewers.map((r, i) => {
+                const rate = reviewerStats[i].totalSec > 0 ? reviewerStats[i].flaggedSec / reviewerStats[i].totalSec : 0;
+                const isOutlier = avgFlagRate > 0 && (rate > avgFlagRate * 2 || rate < avgFlagRate * 0.5);
+                return `<tr style="border-bottom:1px solid #f3f4f6;">
+                    <td style="padding:6px 0;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${REVIEWER_COLORS[i % REVIEWER_COLORS.length]};margin-right:6px;"></span>${r}</td>
+                    <td style="text-align:right;padding:6px 0;">${reviewerStats[i].regionCount}</td>
+                    <td style="text-align:right;padding:6px 0;">${formatSeconds(reviewerStats[i].flaggedSec)}</td>
+                    <td style="text-align:right;padding:6px 0;">${(rate * 100).toFixed(1)}%</td>
+                    <td style="text-align:right;padding:6px 0;color:${isOutlier ? '#f97316' : '#22c55e'};font-weight:500;">${isOutlier ? 'Outlier' : 'Normal'}</td>
+                </tr>`;
+            }).join('')}
+        </table>
+    </div>`;
+
+    // --- Section 5: Reasons Analysis ---
+    // Find overlapping regions across reviewers and compare their notes
+    const overlappingRegions = [];
+    const allNotes = [];
+    studyIds.forEach(sid => {
+        const study = STUDIES[sid];
+        const startMs = new Date(study.polar.ts[0]).getTime();
+        const duration = Math.ceil((new Date(study.polar.ts[study.polar.ts.length - 1]).getTime() - startMs) / 1000);
+        // Collect all trims with reviewer attribution
+        const allTrims = [];
+        reviewers.forEach(r => {
+            (irrData[r][sid] || []).forEach(t => {
+                const note = (t.note || t.reason || '').trim();
+                if (note) allNotes.push(note);
+                allTrims.push({ reviewer: r, start: Math.max(0, (new Date(t.start).getTime() - startMs) / 1000), end: Math.min(duration, (new Date(t.end).getTime() - startMs) / 1000), note });
+            });
+        });
+        // Find clusters: trims that overlap in time from different reviewers
+        for (let i = 0; i < allTrims.length; i++) {
+            const cluster = [allTrims[i]];
+            for (let j = i + 1; j < allTrims.length; j++) {
+                if (allTrims[j].reviewer === allTrims[i].reviewer) continue;
+                if (allTrims[j].start < allTrims[i].end && allTrims[j].end > allTrims[i].start) {
+                    if (!cluster.find(c => c.reviewer === allTrims[j].reviewer)) {
+                        cluster.push(allTrims[j]);
+                    }
+                }
+            }
+            if (cluster.length >= 2 && cluster.some(c => c.note)) {
+                const key = sid + '_' + Math.round(cluster[0].start);
+                if (!overlappingRegions.find(o => o.key === key)) {
+                    overlappingRegions.push({ key, sid, cluster, startSec: Math.min(...cluster.map(c=>c.start)), endSec: Math.max(...cluster.map(c=>c.end)) });
+                }
+            }
+        }
+    });
+
+    // Note frequency + V2 category tracking
+    const noteFreq = {};
+    const v2CategoryCounts = {};
+    allNotes.forEach(n => {
+        const lower = n.toLowerCase();
+        noteFreq[lower] = (noteFreq[lower] || { text: n, count: 0 });
+        noteFreq[lower].count++;
+    });
+    const sortedNotes = Object.values(noteFreq).sort((a, b) => b.count - a.count);
+
+    // V2: Direct category counts from structured data (preferred over regex)
+    const allCategories = [];
+    const categoryReviewerCounts = {};
+    reviewers.forEach(r => {
+        studyIds.forEach(sid => {
+            (irrData[r][sid] || []).forEach(t => {
+                const cat = t.category || null;
+                if (cat && cat !== 'Uncategorized') {
+                    allCategories.push(cat);
+                    if (!categoryReviewerCounts[cat]) categoryReviewerCounts[cat] = {};
+                    categoryReviewerCounts[cat][r] = (categoryReviewerCounts[cat][r] || 0) + 1;
+                }
+            });
+        });
+    });
+    const hasV2Categories = allCategories.length > 0;
+
+    // Theme extraction — V2 uses direct categories, fallback to regex for V1 data
+    const THEMES = [
+        { canonical: 'Flatline / Lockout', description: 'HR stays constant while WHOOP shows normal variation',
+          v2Category: 'Flatline / Lockout',
+          patterns: ['flatline', 'lockout', 'flat', 'staircase', 'stepwise', 'stays constant'] },
+        { canonical: 'Jump(s)', description: 'Abrupt HR changes that don\'t match WHOOP',
+          v2Category: 'Jump(s)',
+          patterns: ['jump', 'jumpy', 'sudden', 'abrupt', 'staircase'] },
+        { canonical: 'Noisy Polar / Spikes', description: 'High-frequency noise, erratic spikes, or jittery signal',
+          v2Category: 'Noisy Polar / Spikes',
+          patterns: ['noisy', 'noise', 'spike', 'spikes', 'erratic', 'jitter', 'dropout', 'drop out'] },
+        { canonical: 'Large Mismatch with WHOOP', description: 'Polar and WHOOP diverge significantly',
+          v2Category: 'Large Mismatch with WHOOP',
+          patterns: ['mismatch', 'multi device', 'multidevice', 'multi-device', 'disagreement', 'discrepancy', 'inconsistent', 'disgreement'] },
+        { canonical: 'Impossible Value', description: 'HR below 30 or above 220 BPM',
+          v2Category: 'Impossible Value',
+          patterns: ['impossible', 'physiolog', 'unrealistic', 'unreliable', '<30', '>220'] },
+    ];
+    const themeCounts = THEMES.map(t => ({ ...t, count: 0, reviewerCounts: {} }));
+
+    if (hasV2Categories) {
+        // V2 path: count from structured category field directly
+        allCategories.forEach(cat => {
+            const tc = themeCounts.find(t => t.v2Category === cat);
+            if (tc) tc.count++;
+        });
+        reviewers.forEach(r => {
+            themeCounts.forEach(tc => {
+                tc.reviewerCounts[r] = (categoryReviewerCounts[tc.v2Category] || {})[r] || 0;
+            });
+        });
+    } else {
+        // V1 fallback: regex-based theme extraction from free-text notes
+        allNotes.forEach(n => {
+            const lower = n.toLowerCase();
+            themeCounts.forEach(t => {
+                if (t.patterns.some(p => lower.includes(p))) {
+                    t.count++;
+                }
+            });
+        });
+        reviewers.forEach(r => {
+            const rNotes = [];
+            studyIds.forEach(sid => {
+                (irrData[r][sid] || []).forEach(t => {
+                    const note = (t.note || t.reason || t.notes || '').trim();
+                    if (note) rNotes.push(note.toLowerCase());
+                });
+            });
+            themeCounts.forEach(tc => {
+                tc.reviewerCounts[r] = rNotes.filter(n => tc.patterns.some(p => n.includes(p))).length;
+            });
+        });
+    }
+    const activeThemes = themeCounts.filter(t => t.count > 0).sort((a, b) => b.count - a.count);
+
+    html += `<h3 style="margin-bottom:8px; font-size:14px;">Reasons Analysis</h3>`;
+
+    // Distilled themes
+    if (activeThemes.length > 0) {
+        const maxCount = activeThemes[0].count;
+        const sourceLabel = hasV2Categories ? 'Structured categories from V2 annotations' : 'Regex-extracted themes from free-text notes (V1 data)';
+        html += `<div style="margin-bottom:20px;">
+            <strong style="font-size:12px; color:#374151;">Category Distribution</strong>
+            <p style="font-size:11px; color:#6b7280; margin:4px 0 10px;">${sourceLabel}</p>
+            ${activeThemes.map(t => `<div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                <div style="width:240px; flex-shrink:0;">
+                    <div style="font-size:12px; font-weight:600;">${t.canonical}</div>
+                    <div style="font-size:10px; color:#6b7280; margin-top:2px;">${t.description || ''}</div>
+                    <div style="font-size:9px; color:#9ca3af; margin-top:3px;">Catches: ${t.patterns.map(p => '<b style="color:#374151;">' + p + '</b>').join(', ')}</div>
+                </div>
+                <div style="flex:1; height:20px; background:#f3f4f6; border-radius:4px; overflow:hidden; position:relative;">
+                    <div style="height:100%; width:${(t.count / maxCount) * 100}%; background:#3b82f6; border-radius:4px;"></div>
+                </div>
+                <span style="font-size:12px; font-weight:600; width:36px; text-align:right;">${t.count}</span>
+            </div>`).join('')}
+        </div>`;
+
+        // Theme usage per reviewer
+        html += `<div style="margin-bottom:20px;">
+            <strong style="font-size:12px; color:#374151;">Theme Usage by Reviewer</strong>
+            <table style="width:100%; font-size:11px; border-collapse:collapse; margin-top:6px;">
+                <tr style="border-bottom:1px solid #e5e7eb; background:#f9fafb;">
+                    <th style="text-align:left;padding:6px;">Theme</th>
+                    ${reviewers.map((r, i) => `<th style="text-align:center;padding:6px;color:${REVIEWER_COLORS[i % REVIEWER_COLORS.length]};">${r}</th>`).join('')}
+                    <th style="text-align:right;padding:6px;">Total</th>
+                </tr>
+                ${activeThemes.map(t => `<tr style="border-bottom:1px solid #f3f4f6;">
+                    <td style="padding:6px;font-weight:500;">${t.canonical}</td>
+                    ${reviewers.map(r => `<td style="text-align:center;padding:6px;">${t.reviewerCounts[r] || 0}</td>`).join('')}
+                    <td style="text-align:right;padding:6px;font-weight:600;">${t.count}</td>
+                </tr>`).join('')}
+            </table>
+        </div>`;
+    }
+
+    // Raw frequency table
+    if (sortedNotes.length > 0) {
+        html += `<div style="margin-bottom:16px;">
+            <strong style="font-size:12px; color:#374151;">Raw Note Frequency</strong>
+            <p style="font-size:11px; color:#6b7280; margin:4px 0 6px;">Exact phrases as written by reviewers.</p>
+            <table style="width:100%; font-size:12px; border-collapse:collapse; margin-top:6px;">
+                <tr style="border-bottom:1px solid #e5e7eb; background:#f9fafb;"><th style="text-align:left;padding:6px;">Reason</th><th style="text-align:right;padding:6px;">Count</th></tr>
+                ${sortedNotes.slice(0, 20).map(n => `<tr style="border-bottom:1px solid #f3f4f6;"><td style="padding:6px;">${n.text}</td><td style="text-align:right;padding:6px;font-weight:500;">${n.count}</td></tr>`).join('')}
+            </table>
+        </div>`;
+    } else {
+        html += `<p style="font-size:12px; color:#9ca3af; margin-bottom:16px;">No notes provided by any reviewer.</p>`;
+    }
+
+    // Overlapping regions comparison
+    if (overlappingRegions.length > 0) {
+        html += `<div style="margin-bottom:24px;">
+            <strong style="font-size:12px; color:#374151;">Compared Reasons on Overlapping Regions</strong>
+            <p style="font-size:11px; color:#6b7280; margin:4px 0 8px;">Where 2+ reviewers flagged the same time region — what did each say?</p>
+            <table style="width:100%; font-size:11px; border-collapse:collapse;">
+                <tr style="border-bottom:1px solid #e5e7eb; background:#f9fafb;">
+                    <th style="text-align:left;padding:6px;">Study</th>
+                    <th style="text-align:left;padding:6px;">Time Range</th>
+                    ${reviewers.map((r, i) => `<th style="text-align:left;padding:6px;color:${REVIEWER_COLORS[i % REVIEWER_COLORS.length]};">${r}</th>`).join('')}
+                </tr>
+                ${overlappingRegions.slice(0, 40).map(o => `<tr style="border-bottom:1px solid #f3f4f6;">
+                    <td style="padding:6px;font-weight:500;">${o.sid}</td>
+                    <td style="padding:6px;">${formatSeconds(Math.round(o.startSec))} → ${formatSeconds(Math.round(o.endSec))}</td>
+                    ${reviewers.map(r => {
+                        const match = o.cluster.find(c => c.reviewer === r);
+                        return `<td style="padding:6px;color:${match && match.note ? '#374151' : '#d1d5db'};">${match ? (match.note || '—') : ''}</td>`;
+                    }).join('')}
+                </tr>`).join('')}
+            </table>
+            ${overlappingRegions.length > 40 ? `<p style="font-size:11px;color:#6b7280;margin-top:4px;">Showing 40 of ${overlappingRegions.length} overlapping regions.</p>` : ''}
+        </div>`;
+    }
+
+    // --- Section 6: Per-Study Breakdown ---
+    html += `<h3 style="margin-bottom:8px; font-size:14px;">Per-Study Breakdown</h3>
+    <p style="font-size:11px; color:#6b7280; margin-bottom:12px;">Click a study row to expand the timeline comparison and annotation details.</p>
+    <table style="width:100%; font-size:12px; border-collapse:collapse; margin-bottom:24px;">
+        <tr style="border-bottom:1px solid #e5e7eb; background:#f9fafb;">
+            <th style="text-align:left;padding:8px 6px;">Study</th>
+            <th style="text-align:left;padding:8px 6px;">Campaign</th>
+            <th style="text-align:right;padding:8px 6px;">Duration</th>
+            <th style="text-align:right;padding:8px 6px;">Flagged %</th>
+            <th style="text-align:right;padding:8px 6px;">IoU</th>
+            <th style="text-align:right;padding:8px 6px;">Agreement</th>
+        </tr>
+        ${studyMetrics.map((sm, idx) => {
+            const band = getAgreementBand(sm.studyIoU);
+            const noFlags = sm.allBins.every(b => b.reduce((s,v)=>s+v,0) === 0);
+            return `<tr style="border-bottom:1px solid #f3f4f6; cursor:pointer;" onclick="toggleStudyDetail(${idx})">
+                <td style="padding:8px 6px; font-weight:500;"><span id="chevron_${idx}" style="display:inline-block;transition:transform 0.2s;margin-right:6px;font-size:10px;color:#9ca3af;">&#9654;</span>${sm.sid}</td>
+                <td style="padding:8px 6px;">${sm.campaign}</td>
+                <td style="text-align:right;padding:8px 6px;">${formatSeconds(sm.duration)}</td>
+                <td style="text-align:right;padding:8px 6px;">${sm.flaggedPct.toFixed(1)}%</td>
+                <td style="text-align:right;padding:8px 6px;">${noFlags ? '—' : (sm.studyIoU * 100).toFixed(1) + '%'}</td>
+                <td style="text-align:right;padding:8px 6px;color:${band.color};font-weight:500;">${noFlags ? 'All Clear' : band.label}</td>
+            </tr>
+            <tr id="studyDetail_${idx}" style="display:none;">
+                <td colspan="6" style="padding:12px 6px; background:#fafafa;"></td>
+            </tr>`;
+        }).join('')}
+    </table>`;
+
+    container.innerHTML = html;
+
+    // Store metrics for detail expansion
+    window._irrStudyMetrics = studyMetrics;
+    window._irrReviewers = reviewers;
+}
+
+function toggleStudyDetail(idx) {
+    const row = document.getElementById('studyDetail_' + idx);
+    if (!row) return;
+    if (row.style.display === 'none') {
+        row.style.display = '';
+        const chevron = document.getElementById('chevron_' + idx);
+        if (chevron) chevron.style.transform = 'rotate(90deg)';
+        const sm = window._irrStudyMetrics[idx];
+        const reviewers = window._irrReviewers;
+        const cell = row.querySelector('td');
+        const duration = sm.duration;
+
+        // Timeline bars (will go under chart)
+        let timeline = '';
+        reviewers.forEach((r, ri) => {
+            const trims = irrData[r][sm.sid] || [];
+            const color = REVIEWER_COLORS[ri % REVIEWER_COLORS.length];
+            timeline += `<div style="display:flex;align-items:center;margin-bottom:3px;">
+                <div style="position:relative;flex:1;height:14px;background:#e5e7eb;border-radius:3px;overflow:hidden;">
+                    ${trims.map(t => {
+                        const tStart = Math.max(0, (new Date(t.start).getTime() - sm.startMs) / 1000);
+                        const tEnd = Math.min(duration, (new Date(t.end).getTime() - sm.startMs) / 1000);
+                        const left = (tStart / duration) * 100;
+                        const width = ((tEnd - tStart) / duration) * 100;
+                        return `<div style="position:absolute;left:${left}%;width:${width}%;height:100%;background:${color};opacity:0.7;border-radius:2px;" title="${r}: ${formatSeconds(Math.round(tStart))} — ${formatSeconds(Math.round(tEnd))}${(t.note || t.reason) ? ': ' + (t.note || t.reason) : ''}"></div>`;
+                    }).join('')}
+                </div>
+                <span style="font-size:10px;width:24px;flex-shrink:0;color:${color};text-align:left;margin-left:4px;font-weight:600;">${r.replace('Reviewer ', 'R')}</span>
+            </div>`;
+        });
+
+        // No separate time axis — the chart x-axis above serves as reference
+
+        // Annotation details
+        let details = '<div style="margin-top:16px;"><strong style="font-size:12px;">Annotations</strong></div>';
+        details += '<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;margin-top:8px;">';
+        reviewers.forEach((r, ri) => {
+            const trims = irrData[r][sm.sid] || [];
+            const color = REVIEWER_COLORS[ri % REVIEWER_COLORS.length];
+            details += `<div style="font-size:11px;">
+                <div style="font-weight:600;margin-bottom:4px;color:${color};">${r}</div>
+                ${trims.length === 0 ? '<div style="color:#9ca3af;font-style:italic;">No regions flagged</div>' :
+                trims.map(t => {
+                    const tStart = Math.max(0, (new Date(t.start).getTime() - sm.startMs) / 1000);
+                    const tEnd = Math.min(duration, (new Date(t.end).getTime() - sm.startMs) / 1000);
+                    return `<div style="padding:3px 0;border-bottom:1px solid #f3f4f6;">${formatSeconds(Math.round(tStart))} → ${formatSeconds(Math.round(tEnd))}${(t.note || t.reason) ? ' <span style="color:#6b7280;">(' + (t.note || t.reason) + ')</span>' : ''}</div>`;
+                }).join('')}
+            </div>`;
+        });
+        details += '</div>';
+
+        // HR chart
+        const chartId = 'irrChart_' + idx;
+        const timelineId = 'irrTimeline_' + idx;
+        let hrChart = `<div id="${chartId}" style="width:100%;height:200px;"></div>`;
+
+        cell.innerHTML = hrChart + `<div id="${timelineId}">` + timeline + `</div>` + details;
+
+        // Render mini Plotly chart
+        const study = STUDIES[sm.sid];
+        const startMs = sm.startMs;
+        const endMs = sm.endMs;
+        const endMin = (endMs - startMs) / 60000;
+        const miniTraces = [];
+        // Polar trace
+        miniTraces.push({
+            x: study.polar.ts.map(ts => (new Date(ts).getTime() - startMs) / 60000),
+            y: study.polar.hr,
+            name: 'Polar', mode: 'lines', line: { color: '#92400e', width: 1.5 }
+        });
+        // WHOOP traces
+        let wi = 1;
+        for (const [strap, data] of Object.entries(study.whoop || {})) {
+            const xArr = [], yArr = [];
+            for (let j = 0; j < data.ts.length; j++) {
+                const t = new Date(data.ts[j]).getTime();
+                if (t >= startMs && t <= endMs) { xArr.push((t - startMs) / 60000); yArr.push(data.hr[j]); }
+            }
+            miniTraces.push({ x: xArr, y: yArr, name: 'WHOOP ' + wi, mode: 'lines', line: { width: 1, dash: 'dot' }, opacity: 0.5 });
+            wi++;
+        }
+        // Flagged region shapes per reviewer
+        const miniShapes = [];
+        reviewers.forEach((r, ri) => {
+            (irrData[r][sm.sid] || []).forEach(t => {
+                const x0 = Math.max(0, (new Date(t.start).getTime() - startMs) / 60000);
+                const x1 = Math.min(endMin, (new Date(t.end).getTime() - startMs) / 60000);
+                miniShapes.push({ type: 'rect', xref: 'x', yref: 'paper', x0, x1, y0: 0, y1: 1,
+                    fillcolor: REVIEWER_COLORS[ri % REVIEWER_COLORS.length], opacity: 0.15, line: { width: 0 } });
+            });
+        });
+        Plotly.newPlot(chartId, miniTraces, {
+            height: 200, margin: { l: 40, r: 10, t: 10, b: 30 },
+            xaxis: { title: '', range: [0, endMin], fixedrange: true },
+            yaxis: { title: 'BPM', fixedrange: true },
+            legend: { orientation: 'h', y: 1.15, font: { size: 10 } },
+            shapes: miniShapes, hovermode: false
+        }, { responsive: true, displayModeBar: false, staticPlot: true }).then(() => {
+            const chartEl = document.getElementById(chartId);
+            const xOffset = chartEl._fullLayout.xaxis._offset;
+            const xLength = chartEl._fullLayout.xaxis._length;
+            const tlEl = document.getElementById(timelineId);
+            tlEl.style.marginLeft = xOffset + 'px';
+            tlEl.style.width = xLength + 'px';
+        });
+    } else {
+        row.style.display = 'none';
+        const chevron = document.getElementById('chevron_' + idx);
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
+    }
+}
+
+// ============================================================
+// EXPORT
+// ============================================================
+function renderExportProgress() {
+    const total = Object.keys(STUDIES).length;
+    const reviewed = Object.keys(STUDIES).filter(sid => {
+        const trims = getTrims(sid);
+        return trims.length > 0;
+    }).length;
+    const el = document.getElementById('exportProgress');
+    if (reviewed === total) {
+        el.innerHTML = `<div style="background: #ecfdf5; border: 1px solid #10b981; border-radius: 8px; padding: 12px 16px; color: #065f46; font-weight: 500;">All ${total} studies reviewed. Please download and submit your file.</div>`;
+    } else {
+        el.innerHTML = `<div style="font-size: 13px; color: #6b7280;">${reviewed} of ${total} studies have trims marked.</div>`;
+    }
+}
+
+function exportTrims() {
+    if (!currentReviewer) { alert('Select a reviewer first'); return; }
+    const myTrims = {};
+    Object.entries(allTrims).forEach(([key, trims]) => {
+        if (key.startsWith(currentReviewer + '__')) {
+            const sid = key.replace(currentReviewer + '__', '');
+            myTrims[sid] = trims;
+        }
+    });
+    downloadJSON(myTrims, `polar_irr_trims_v2_${currentReviewer.replace(/\s/g, '_')}.json`);
+}
+
+function exportAllTrims() {
+    downloadJSON(allTrims, 'polar_irr_trims_all.json');
+}
+
+function importProgress(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (!currentReviewer || currentReviewer === 'admin') { alert('Sign in as a reviewer first'); return; }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = JSON.parse(e.target.result);
+            let imported = 0;
+            Object.entries(data).forEach(([sid, trims]) => {
+                if (STUDIES[sid] && Array.isArray(trims)) {
+                    const key = `${currentReviewer}__${sid}`;
+                    // V2: normalize imported trims — handle V1 format (reason) and V2 format (category+notes)
+                    allTrims[key] = trims.map(t => ({
+                        start: t.start,
+                        end: t.end,
+                        category: t.category || 'Uncategorized',
+                        notes: t.notes || t.reason || '',
+                        created: t.created || new Date().toISOString()
+                    }));
+                    imported += trims.length;
+                }
+            });
+            saveTrims();
+            alert(`Imported ${imported} trims across ${Object.keys(data).length} studies for ${currentReviewer}.`);
+            if (document.getElementById('tab-studies').style.display !== 'none') renderStudyTable();
+        } catch(err) {
+            alert('Invalid JSON file.');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function downloadJSON(data, filename) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+}
+
+// ============================================================
+// V2: ANNOTATION MODAL
+// ============================================================
+function showAnnotationModal(start, end) {
+    document.getElementById('annotationTimeRange').textContent = `Selected: ${formatTime(start)} \u2013 ${formatTime(end)}`;
+    document.getElementById('annotationOverlay').style.display = 'flex';
+    document.getElementById('annotationError').style.display = 'none';
+    document.getElementById('annotationNotes').value = '';
+    document.querySelectorAll('input[name="trimCategory"]').forEach(r => r.checked = false);
+    document.getElementById('notesRequiredLabel').style.display = 'none';
+    // Listen for category changes to show/hide required label
+    document.querySelectorAll('input[name="trimCategory"]').forEach(r => {
+        r.onchange = function() {
+            const isOther = this.value === 'Other';
+            document.getElementById('notesRequiredLabel').style.display = isOther ? 'inline' : 'none';
+            document.getElementById('annotationNotes').placeholder = isOther ? 'Required \u2014 describe what you see...' : 'Optional \u2014 add context about what you see...';
+        };
+    });
+    // ESC to close
+    document.addEventListener('keydown', annotationKeyHandler);
+}
+
+function annotationKeyHandler(e) {
+    if (e.key === 'Escape') cancelAnnotation();
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitAnnotation(); }
+}
+
+function cancelAnnotation() {
+    document.getElementById('annotationOverlay').style.display = 'none';
+    document.removeEventListener('keydown', annotationKeyHandler);
+    pendingTrimStart = null;
+    pendingTrimEnd = null;
+    trimStart = null;
+    document.getElementById('trimModeLabel').textContent = 'Click chart to mark start of bad region';
+}
+
+function submitAnnotation() {
+    const selected = document.querySelector('input[name="trimCategory"]:checked');
+    const notes = document.getElementById('annotationNotes').value.trim();
+    const errorEl = document.getElementById('annotationError');
+
+    if (!selected) {
+        errorEl.textContent = 'Please select a category.';
+        errorEl.style.display = 'block';
+        return;
+    }
+    if (selected.value === 'Other' && !notes) {
+        errorEl.textContent = 'Notes are required when selecting "Other".';
+        errorEl.style.display = 'block';
+        return;
+    }
+
+    addTrim(currentStudy, pendingTrimStart, pendingTrimEnd, selected.value, notes);
+
+    // Close modal and refresh
+    document.getElementById('annotationOverlay').style.display = 'none';
+    document.removeEventListener('keydown', annotationKeyHandler);
+    trimStart = null;
+    pendingTrimStart = null;
+    pendingTrimEnd = null;
+    document.getElementById('trimModeLabel').textContent = 'Click chart to mark start of bad region';
+    const chartEl = document.getElementById('chart');
+    const savedRange = chartEl._fullLayout ? chartEl._fullLayout.xaxis.range.slice() : null;
+    renderChart(STUDIES[currentStudy]);
+    if (savedRange) Plotly.relayout('chart', { 'xaxis.range': savedRange });
+    renderTrimList();
+}
+
+// ============================================================
+// V2: SIG RUBRIC PANEL
+// ============================================================
+function toggleRubric() {
+    const panel = document.getElementById('rubricPanel');
+    const backdrop = document.getElementById('rubricBackdrop');
+    const isOpen = panel.classList.contains('open');
+    if (isOpen) {
+        panel.classList.remove('open');
+        backdrop.style.display = 'none';
+    } else {
+        panel.classList.add('open');
+        backdrop.style.display = 'block';
+    }
+}
+
+// ============================================================
+// V2: IMPORT BACKWARD COMPATIBILITY
+// ============================================================
+// Import handles both V1 (reason field) and V2 (category+notes) formats.
+// See importProgress() above — it normalizes on import.
+
+</script>
+</body>
+</html>
