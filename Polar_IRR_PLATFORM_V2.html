@@ -314,7 +314,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         Reference guide for identifying bad Polar HR signal. Follow the decision tree and use the category options when annotating.
     </div>
 
-    <h4 style="font-size:13px; margin-bottom:10px;">Patterns to Flag</h4>
+    <h4 style="font-size:13px; margin-bottom:10px;">Important Rules Before Marking</h4>
+    <ul class="rules-list" style="padding-left:18px;">
+        <li><strong>Session start:</strong> Polar often needs 1–2 minutes to stabilize. Always check the beginning of each session.</li>
+        <li><strong>Minimum duration:</strong> Annotated segments should be 5–10+ seconds. Ignore brief blips.</li>
+        <li><strong>Merge nearby regions:</strong> If the gap between two bad segments is under ~30 seconds, merge into one trim.</li>
+        <li><strong>Impossible values:</strong> Flag Polar below 30 BPM or above 220 BPM.</li>
+        <li><strong>Data gaps:</strong> Missing Polar data or values of 0 should <strong>NOT</strong> be marked. Only flag when Polar is present but wrong.</li>
+        <li><strong>WHOOP-only errors:</strong> Do not mark Polar merely because WHOOP looks wrong. Investigate: check other sensors, activity context, signal shape, and motion.</li>
+        <li><strong>Be conservative:</strong> When evidence is balanced, leave the region unmarked rather than guessing.</li>
+    </ul>
+
+    <h4 style="font-size:13px; margin:20px 0 10px;">Patterns to Flag</h4>
 
     <div class="pattern-card" style="border-left:3px solid #ef4444;">
         <h4>1. Flatline / Lockout</h4>
@@ -364,16 +375,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         <div class="step"><span class="step-num">7</span><span><strong>Smooth and believable?</strong> → <strong>Leave it.</strong></span></div>
     </div>
 
-    <h4 style="font-size:13px; margin-bottom:10px;">Important Rules Before Marking</h4>
-    <ul class="rules-list" style="padding-left:18px;">
-        <li><strong>Session start:</strong> Polar often needs 1–2 minutes to stabilize. Always check the beginning of each session.</li>
-        <li><strong>Minimum duration:</strong> Annotated segments should be 5–10+ seconds. Ignore brief blips.</li>
-        <li><strong>Merge nearby regions:</strong> If the gap between two bad segments is under ~30 seconds, merge into one trim.</li>
-        <li><strong>Impossible values:</strong> Flag Polar below 30 BPM or above 220 BPM.</li>
-        <li><strong>Data gaps:</strong> Missing Polar data or values of 0 should <strong>NOT</strong> be marked. Only flag when Polar is present but wrong.</li>
-        <li><strong>WHOOP-only errors:</strong> Do not mark Polar merely because WHOOP looks wrong. Investigate: check other sensors, activity context, signal shape, and motion.</li>
-        <li><strong>Be conservative:</strong> When evidence is balanced, leave the region unmarked rather than guessing.</li>
-    </ul>
     </div>
 </div>
 </div><!-- end app-layout -->
