@@ -330,7 +330,23 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     </div>
     <div class="pattern-card" style="border-left:3px solid #3b82f6;">
         <h4>4. Large Mismatch with WHOOP</h4>
-        <p>Polar and WHOOP traces diverge significantly but neither shows obvious artifacts. The signals tell different stories — flag if the difference is sustained and Polar is the outlier.</p>
+        <p>Polar and WHOOP differ by <strong>20+ BPM for at least 30 seconds</strong>. Also mark slow drift where Polar settles at a clearly wrong level for several minutes after a jump. Polar may look smooth here — this is the only pattern that cannot be judged from the Polar line alone.</p>
+        <a onclick="document.getElementById('mismatchDetail').style.display=document.getElementById('mismatchDetail').style.display==='none'?'block':'none'; this.textContent=document.getElementById('mismatchDetail').style.display==='none'?'Show criteria \u25BC':'Hide criteria \u25B2';" style="font-size:11px; color:#3b82f6; cursor:pointer; font-weight:600; display:inline-block; margin-top:6px;">Show criteria \u25BC</a>
+        <div id="mismatchDetail" style="display:none; margin-top:8px; font-size:11px; color:#374151; line-height:1.6; border-top:1px solid #e5e7eb; padding-top:8px;">
+            <p style="margin:0 0 6px;"><strong>Multi-sensor logic:</strong></p>
+            <ul style="padding-left:16px; margin:0 0 8px;">
+                <li>Sensors within ~10 BPM of each other and all disagreeing with Polar = <strong>strong evidence, mark Polar.</strong></li>
+                <li>Sensors spread &gt;10 BPM apart = no reliable reference, <strong>leave it.</strong></li>
+                <li>At least half the sensors disagreeing with Polar by 20+ BPM = <strong>mark Polar.</strong></li>
+            </ul>
+            <p style="margin:0 0 6px;"><strong>Tie-breakers (in order):</strong></p>
+            <ol style="padding-left:16px; margin:0 0 8px;">
+                <li><strong>Activity context</strong> — 150 BPM at rest or 55 BPM mid-sprint is unlikely regardless of source.</li>
+                <li><strong>Shape</strong> — real HR ramps and recovers smoothly; which line behaves physiologically?</li>
+                <li><strong>Motion</strong> — during high motion, trust WHOOP less; during rest/sleep, trust it more.</li>
+            </ol>
+            <p style="margin:0;"><strong>Do NOT mark</strong> when WHOOP sensors disagree among themselves, when only WHOOP looks wrong and Polar remains smooth and plausible, or for differences shorter than 30 seconds. If evidence is balanced, leave unmarked.</p>
+        </div>
     </div>
     <div class="pattern-card" style="border-left:3px solid #ec4899;">
         <h4>5. Impossible Value</h4>
@@ -339,20 +355,24 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
     <h4 style="font-size:13px; margin:20px 0 10px;">Decision Tree</h4>
     <div class="decision-tree">
-        <div class="step"><span class="step-num">1</span><span><strong>See something weird in Polar?</strong> Check if WHOOP sensors show the same thing.</span></div>
-        <div class="step"><span class="step-num">2</span><span><strong>Both devices agree?</strong> → Likely real physiology. <strong>Don't trim.</strong></span></div>
-        <div class="step"><span class="step-num">3</span><span><strong>Only Polar affected?</strong> → Bad signal. <strong>Trim it.</strong></span></div>
-        <div class="step"><span class="step-num">4</span><span><strong>Ambiguous?</strong> Check context: activity type, signal shape, motion. If in doubt, <strong>trim conservatively</strong> (mark it).</span></div>
+        <div class="step"><span class="step-num">1</span><span><strong>Is Polar present?</strong> (not missing, not 0) — No → data gap, <strong>leave it.</strong></span></div>
+        <div class="step"><span class="step-num">2</span><span><strong>Polar &lt;30 or &gt;220 BPM?</strong> — Yes → impossible value, <strong>mark it.</strong></span></div>
+        <div class="step"><span class="step-num">3</span><span><strong>Flatline?</strong> Same value (±1 BPM) for 30+ s while WHOOP fluctuates — <strong>mark</strong> (unless context explains low steady HR at rest/sleep).</span></div>
+        <div class="step"><span class="step-num">4</span><span><strong>Jump?</strong> 25+ BPM step in &lt;5 s — check samples are continuous (not a gap). If real step and WHOOP disagrees → <strong>mark.</strong></span></div>
+        <div class="step"><span class="step-num">5</span><span><strong>Noisy / spiky?</strong> 15+ BPM spike &amp; back in 5 s, or 25+ BPM swings over 1–2 min while WHOOP is stable → <strong>mark.</strong></span></div>
+        <div class="step"><span class="step-num">6</span><span><strong>Large mismatch?</strong> Polar vs WHOOP 20+ BPM apart for 30+ s → check corroboration (see mismatch card below).</span></div>
+        <div class="step"><span class="step-num">7</span><span><strong>Smooth and believable?</strong> → <strong>Leave it.</strong></span></div>
     </div>
 
-    <h4 style="font-size:13px; margin-bottom:10px;">General Rules</h4>
+    <h4 style="font-size:13px; margin-bottom:10px;">Important Rules Before Marking</h4>
     <ul class="rules-list" style="padding-left:18px;">
-        <li><strong>Minimum duration:</strong> Flag regions ≥5-10 seconds. Brief 1-2s blips can be ignored.</li>
-        <li><strong>Merge nearby regions:</strong> If gaps between bad segments are &lt;30 seconds, merge into one trim.</li>
-        <li><strong>Session start:</strong> Always check the first 30-60 seconds — flatline/lockout is common here.</li>
-        <li><strong>Be conservative:</strong> When in doubt, flag it. It's better to over-flag than to miss bad data.</li>
-        <li><strong>Impossible values:</strong> Any reading &lt;30 or &gt;220 BPM should always be flagged.</li>
-        <li><strong>Data gaps:</strong> If Polar signal disappears entirely (no data points), flag the gap.</li>
+        <li><strong>Session start:</strong> Polar often needs 1–2 minutes to stabilize. Always check the beginning of each session.</li>
+        <li><strong>Minimum duration:</strong> Annotated segments should be 5–10+ seconds. Ignore brief blips.</li>
+        <li><strong>Merge nearby regions:</strong> If the gap between two bad segments is under ~30 seconds, merge into one trim.</li>
+        <li><strong>Impossible values:</strong> Flag Polar below 30 BPM or above 220 BPM.</li>
+        <li><strong>Data gaps:</strong> Missing Polar data or values of 0 should <strong>NOT</strong> be marked. Only flag when Polar is present but wrong.</li>
+        <li><strong>WHOOP-only errors:</strong> Do not mark Polar merely because WHOOP looks wrong. Investigate: check other sensors, activity context, signal shape, and motion.</li>
+        <li><strong>Be conservative:</strong> When evidence is balanced, leave the region unmarked rather than guessing.</li>
     </ul>
     </div>
 </div>
@@ -625,6 +645,48 @@ function renderChart(study) {
         i++;
     }
     
+    // Mismatch highlighting: overlay Polar HR in red where |Polar - nearest WHOOP| >= 20 BPM
+    const whoopDevices = Object.values(study.whoop || {});
+    if (whoopDevices.length > 0) {
+        // Build sorted timestamp arrays (in ms) for each WHOOP device for binary search
+        const whoopParsed = whoopDevices.map(dev => ({
+            tsMs: dev.ts.map(t => new Date(t).getTime()),
+            hr: dev.hr
+        }));
+
+        // For each Polar sample, find the minimum absolute HR difference across all WHOOP devices
+        const mismatchY = study.polar.hr.map((polarHr, idx) => {
+            const polarMs = new Date(study.polar.ts[idx]).getTime();
+            let minDiff = Infinity;
+
+            for (const dev of whoopParsed) {
+                // Binary search for closest WHOOP timestamp within ±5 seconds
+                let lo = 0, hi = dev.tsMs.length - 1, bestIdx = -1, bestDist = Infinity;
+                while (lo <= hi) {
+                    const mid = (lo + hi) >> 1;
+                    const dist = Math.abs(dev.tsMs[mid] - polarMs);
+                    if (dist < bestDist) { bestDist = dist; bestIdx = mid; }
+                    if (dev.tsMs[mid] < polarMs) lo = mid + 1; else hi = mid - 1;
+                }
+                if (bestIdx >= 0 && bestDist <= 5000) {
+                    const diff = Math.abs(polarHr - dev.hr[bestIdx]);
+                    if (diff < minDiff) minDiff = diff;
+                }
+            }
+            return minDiff >= 20 ? polarHr : null;
+        });
+
+        traces.push({
+            x: study.polar.ts.map(t => tsToMinutes(t, startMs)),
+            y: mismatchY,
+            mode: 'lines',
+            name: 'Polar (20+ BPM mismatch)',
+            line: { color: '#dc2626', width: 3 },
+            connectgaps: false,
+            hovertemplate: '%{y:.0f} BPM (mismatch)<extra></extra>'
+        });
+    }
+
     // Trim regions as shapes (convert timestamps to minutes)
     const trims = getTrims(currentStudy);
     const shapes = trims.map(t => ({
@@ -1631,7 +1693,12 @@ function downloadJSON(data, filename) {
 // V2: ANNOTATION MODAL
 // ============================================================
 function showAnnotationModal(start, end) {
-    document.getElementById('annotationTimeRange').textContent = `Selected: ${formatTime(start)} \u2013 ${formatTime(end)}`;
+    const durationMs = new Date(end) - new Date(start);
+    const durationSec = Math.round(durationMs / 1000);
+    const durMin = Math.floor(durationSec / 60);
+    const durS = durationSec % 60;
+    const durStr = durMin > 0 ? `${durMin}m ${durS}s` : `${durS}s`;
+    document.getElementById('annotationTimeRange').textContent = `Selected: ${formatTime(start)} \u2013 ${formatTime(end)}  \u00b7  Duration: ${durStr}`;
     document.getElementById('annotationOverlay').style.display = 'flex';
     document.getElementById('annotationError').style.display = 'none';
     document.getElementById('annotationNotes').value = '';
@@ -1677,6 +1744,15 @@ function submitAnnotation() {
         errorEl.textContent = 'Notes are required when selecting "Other".';
         errorEl.style.display = 'block';
         return;
+    }
+
+    // Warn if trim duration is very short (guidelines recommend 5-10+ seconds)
+    const trimDurationMs = new Date(pendingTrimEnd) - new Date(pendingTrimStart);
+    const trimDurationSec = trimDurationMs / 1000;
+    if (trimDurationSec < 10) {
+        if (!confirm(`Warning: This trim is only ${Math.round(trimDurationSec)}s long.\n\nThe SIG guidelines recommend segments of 5\u201310+ seconds minimum.\n\nSave anyway?`)) {
+            return;
+        }
     }
 
     addTrim(currentStudy, pendingTrimStart, pendingTrimEnd, selected.value, notes);
