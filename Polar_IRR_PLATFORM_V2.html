@@ -616,7 +616,7 @@ function renderChart(study) {
         y: study.polar.hr,
         mode: 'lines',
         name: 'Polar HR (truth)',
-        line: { color: '#92400e', width: 2.5 },
+        line: { color: '#15803d', width: 2.5 },
         hovertemplate: '%{y:.0f}<extra></extra>'
     });
     
@@ -1571,7 +1571,7 @@ function toggleStudyDetail(idx) {
         miniTraces.push({
             x: study.polar.ts.map(ts => (new Date(ts).getTime() - startMs) / 60000),
             y: study.polar.hr,
-            name: 'Polar', mode: 'lines', line: { color: '#92400e', width: 1.5 }
+            name: 'Polar', mode: 'lines', line: { color: '#15803d', width: 1.5 }
         });
         // WHOOP traces
         let wi = 1;
